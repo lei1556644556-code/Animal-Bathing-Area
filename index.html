@@ -770,7 +770,7 @@
 
     <section class="game">
       <div class="topbar">
-        <div class="energy"><span class="bolt">⚡</span><span id="energyValue">0/300</span></div>
+        <div class="energy"><span class="bolt">⚡</span><span id="energyValue">已用 0</span></div>
         <div class="currency" id="currency">0</div>
       </div>
       <div class="board-wrap">
@@ -974,7 +974,9 @@
       scoreEl.textContent = score;
       bestEl.textContent = bestScore;
       brushCountEl.textContent = brushCount;
-      energyValueEl.textContent = `${Math.min(ENERGY_CAP, energyUsed)}/${ENERGY_CAP}`;
+      energyValueEl.textContent = energyUsed < ENERGY_CAP
+        ? `已用 ${energyUsed}`
+        : `已用 ${energyUsed} 难度最大`;
       const fragments = Math.floor(score / 300);
       currencyEl.textContent = fragments;
       rewardCountEl.textContent = `x${fragments}`;
