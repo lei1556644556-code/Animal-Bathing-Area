@@ -531,6 +531,116 @@
       display: flex;
     }
 
+    .app.locked {
+      display: none;
+    }
+
+    .auth-screen {
+      width: min(460px, calc(100% - 28px));
+      margin: auto;
+      padding: 20px;
+    }
+
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .auth-tab {
+      border: 2px solid #d3a763;
+      background: #f8ead5;
+      border-radius: 8px;
+      padding: 10px;
+      cursor: pointer;
+      font-weight: 900;
+      color: #6b4b35;
+    }
+
+    .auth-tab.active {
+      background: #87c8d2;
+      border-color: #4f8794;
+    }
+
+    .auth-form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .auth-form.hidden {
+      display: none;
+    }
+
+    .auth-form label {
+      display: grid;
+      gap: 5px;
+      font-weight: 800;
+      color: #7b5c40;
+    }
+
+    .auth-form input {
+      width: 100%;
+      border: 2px solid #d3a763;
+      border-radius: 8px;
+      padding: 12px;
+      font: inherit;
+      color: var(--ink);
+      background: #fffaf0;
+    }
+
+    .auth-note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .user-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      color: #7b5c40;
+      font-weight: 800;
+    }
+
+    .small-button {
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #f1c15d;
+      color: #573c28;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .leaderboard {
+      margin-top: 14px;
+      text-align: left;
+    }
+
+    .leaderboard h3 {
+      margin: 0 0 8px;
+      color: #7b5c40;
+      text-align: center;
+    }
+
+    .leader-row {
+      display: grid;
+      grid-template-columns: 32px 1fr 72px;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(154, 118, 95, .25);
+      font-size: 14px;
+    }
+
+    .leader-row strong {
+      color: #a06c17;
+    }
+
     @media (max-width: 920px) {
       body {
         align-items: flex-start;
@@ -576,7 +686,42 @@
   </style>
 </head>
 <body>
-  <main class="app">
+  <section class="panel auth-screen" id="authScreen">
+    <h1>动物沐场</h1>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="loginTab" type="button">登录</button>
+      <button class="auth-tab" id="signupTab" type="button">注册</button>
+    </div>
+    <form class="auth-form" id="loginForm">
+      <label>
+        邮箱
+        <input id="loginEmail" type="email" autocomplete="email" required>
+      </label>
+      <label>
+        密码
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="action" type="submit">进入沐场</button>
+    </form>
+    <form class="auth-form hidden" id="signupForm">
+      <label>
+        昵称
+        <input id="signupName" type="text" maxlength="24" autocomplete="nickname" required>
+      </label>
+      <label>
+        邮箱
+        <input id="signupEmail" type="email" autocomplete="email" required>
+      </label>
+      <label>
+        密码
+        <input id="signupPassword" type="password" autocomplete="new-password" minlength="6" required>
+      </label>
+      <button class="action" type="submit">创建账号</button>
+    </form>
+    <div class="auth-note" id="authMessage">请先登录账号，登录后才能进入游戏并上传排行榜成绩。</div>
+  </section>
+
+  <main class="app locked" id="gameApp">
     <section class="panel side">
       <h1>动物沐场 <button class="help" id="helpBtn" title="帮助">?</button></h1>
       <div class="stat">
@@ -590,6 +735,10 @@
       <div class="stat">
         <div class="label">洗澡刷</div>
         <div class="value" id="brushCount">3</div>
+      </div>
+      <div class="user-row">
+        <span id="playerName">未登录</span>
+        <button class="small-button" id="logoutBtn" type="button">退出</button>
       </div>
       <div class="message" id="message">点击任意列投放动物方块，连在一起的同等级动物会自动合成。</div>
     </section>
@@ -617,6 +766,7 @@
       </div>
       <div class="controls">
         <button class="action secondary" id="brushBtn">使用洗澡刷</button>
+        <button class="action secondary" id="submitScoreBtn">提交成绩</button>
         <button class="action danger" id="restartBtn">重新开始</button>
       </div>
     </section>
@@ -627,6 +777,10 @@
         <div>应援荧光棒碎片</div>
         <div class="glow-stick"></div>
         <strong id="rewardCount">x0</strong>
+      </div>
+      <div class="leaderboard">
+        <h3>排行榜 Top 20</h3>
+        <div id="leaderboardList">登录后加载排行榜。</div>
       </div>
     </aside>
   </main>
@@ -642,6 +796,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const ROWS = 7;
     const COLS = 5;
@@ -649,7 +804,22 @@
     const BOARD_SIZE = ROWS * COLS;
     const BUCKET_CHANCE = 0.12;
     const COLORS = Array.from({ length: MAX_LEVEL }, (_, index) => `tile-${index + 1}`);
+    const SUPABASE_URL = "https://dkaabuxszrbnnrajnoaa.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_8UjZAjC-Ts2NiP8_NpmFdA_jv-CEzhd";
+    const LEADERBOARD_TABLE = "leaderboard_scores";
 
+    const authScreenEl = document.getElementById("authScreen");
+    const gameAppEl = document.getElementById("gameApp");
+    const loginTab = document.getElementById("loginTab");
+    const signupTab = document.getElementById("signupTab");
+    const loginForm = document.getElementById("loginForm");
+    const signupForm = document.getElementById("signupForm");
+    const loginEmailEl = document.getElementById("loginEmail");
+    const loginPasswordEl = document.getElementById("loginPassword");
+    const signupNameEl = document.getElementById("signupName");
+    const signupEmailEl = document.getElementById("signupEmail");
+    const signupPasswordEl = document.getElementById("signupPassword");
+    const authMessageEl = document.getElementById("authMessage");
     const boardEl = document.getElementById("board");
     const scoreEl = document.getElementById("score");
     const bestEl = document.getElementById("best");
@@ -661,12 +831,19 @@
     const nextPreviewEl = document.getElementById("nextPreview");
     const fallingLayerEl = document.getElementById("fallingLayer");
     const brushBtn = document.getElementById("brushBtn");
+    const submitScoreBtn = document.getElementById("submitScoreBtn");
     const restartBtn = document.getElementById("restartBtn");
     const helpBtn = document.getElementById("helpBtn");
     const helpModal = document.getElementById("helpModal");
     const closeHelp = document.getElementById("closeHelp");
     const gameOverEl = document.getElementById("gameOver");
+    const playerNameEl = document.getElementById("playerName");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const leaderboardListEl = document.getElementById("leaderboardList");
 
+    let supabaseClient;
+    let currentUser;
+    let currentPlayerName;
     let grid;
     let score;
     let bestScore;
@@ -822,6 +999,159 @@
 
     function delay(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function isSupabaseConfigured() {
+      return SUPABASE_URL.startsWith("https://") && SUPABASE_ANON_KEY.length > 20;
+    }
+
+    function setAuthMode(mode) {
+      const isLogin = mode === "login";
+      loginTab.classList.toggle("active", isLogin);
+      signupTab.classList.toggle("active", !isLogin);
+      loginForm.classList.toggle("hidden", !isLogin);
+      signupForm.classList.toggle("hidden", isLogin);
+      authMessageEl.textContent = isLogin
+        ? "请先登录账号，登录后才能进入游戏并上传排行榜成绩。"
+        : "创建账号后即可进入游戏。若 Supabase 开启了邮箱验证，需要先到邮箱确认。";
+    }
+
+    async function bootstrapAuth() {
+      if (!isSupabaseConfigured()) {
+        authMessageEl.textContent = "还没有配置 Supabase。请把 HTML 顶部脚本里的 SUPABASE_URL 和 SUPABASE_ANON_KEY 填好后再发布。";
+        return;
+      }
+      supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data } = await supabaseClient.auth.getSession();
+      if (data.session?.user) {
+        enterGame(data.session.user);
+      }
+      supabaseClient.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          enterGame(session.user);
+        } else {
+          leaveGame();
+        }
+      });
+    }
+
+    function enterGame(user) {
+      currentUser = user;
+      currentPlayerName = user.user_metadata?.player_name || user.email?.split("@")[0] || "玩家";
+      playerNameEl.textContent = currentPlayerName;
+      authScreenEl.style.display = "none";
+      gameAppEl.classList.remove("locked");
+      if (!grid) init();
+      loadLeaderboard();
+    }
+
+    function leaveGame() {
+      currentUser = null;
+      currentPlayerName = "";
+      authScreenEl.style.display = "block";
+      gameAppEl.classList.add("locked");
+      leaderboardListEl.textContent = "登录后加载排行榜。";
+    }
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      if (!isSupabaseConfigured()) return;
+      authMessageEl.textContent = "正在登录...";
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email: loginEmailEl.value.trim(),
+        password: loginPasswordEl.value
+      });
+      authMessageEl.textContent = error ? `登录失败：${error.message}` : "登录成功。";
+    }
+
+    async function handleSignup(event) {
+      event.preventDefault();
+      if (!isSupabaseConfigured()) return;
+      const playerName = signupNameEl.value.trim().slice(0, 24);
+      if (!playerName) {
+        authMessageEl.textContent = "请先填写昵称。";
+        return;
+      }
+      authMessageEl.textContent = "正在创建账号...";
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: signupEmailEl.value.trim(),
+        password: signupPasswordEl.value,
+        options: {
+          data: { player_name: playerName }
+        }
+      });
+      if (error) {
+        authMessageEl.textContent = `注册失败：${error.message}`;
+      } else if (!data.session) {
+        authMessageEl.textContent = "账号已创建，请先到邮箱完成验证后再登录。";
+        setAuthMode("login");
+      } else {
+        authMessageEl.textContent = "注册成功。";
+      }
+    }
+
+    async function submitScore() {
+      if (!supabaseClient || !currentUser) {
+        messageEl.textContent = "请先登录后再提交成绩。";
+        return;
+      }
+      if (score <= 0) {
+        messageEl.textContent = "本局还没有获得洗浴值，暂时不用提交。";
+        return;
+      }
+      submitScoreBtn.disabled = true;
+      messageEl.textContent = "正在提交排行榜成绩...";
+      const { error } = await supabaseClient
+        .from(LEADERBOARD_TABLE)
+        .insert({
+          user_id: currentUser.id,
+          player_name: currentPlayerName,
+          score,
+          fragments: Math.floor(score / 300)
+        });
+      submitScoreBtn.disabled = false;
+      if (error) {
+        messageEl.textContent = `提交失败：${error.message}`;
+        return;
+      }
+      messageEl.textContent = "成绩已提交到排行榜。";
+      await loadLeaderboard();
+    }
+
+    async function loadLeaderboard() {
+      if (!supabaseClient) return;
+      leaderboardListEl.textContent = "排行榜加载中...";
+      const { data, error } = await supabaseClient
+        .from(LEADERBOARD_TABLE)
+        .select("player_name, score, fragments, created_at")
+        .order("score", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(20);
+      if (error) {
+        leaderboardListEl.textContent = `排行榜读取失败：${error.message}`;
+        return;
+      }
+      if (!data?.length) {
+        leaderboardListEl.textContent = "暂时还没有成绩。";
+        return;
+      }
+      leaderboardListEl.innerHTML = data.map((row, index) => `
+        <div class="leader-row">
+          <strong>${index + 1}</strong>
+          <span>${escapeHtml(row.player_name)}</span>
+          <strong>${row.score}</strong>
+        </div>
+      `).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#039;"
+      }[char]));
     }
 
     async function handleCellClick(row, col) {
@@ -1090,6 +1420,16 @@
       render();
     });
 
+    loginTab.addEventListener("click", () => setAuthMode("login"));
+    signupTab.addEventListener("click", () => setAuthMode("signup"));
+    loginForm.addEventListener("submit", handleLogin);
+    signupForm.addEventListener("submit", handleSignup);
+    submitScoreBtn.addEventListener("click", submitScore);
+    logoutBtn.addEventListener("click", async () => {
+      if (supabaseClient) {
+        await supabaseClient.auth.signOut();
+      }
+    });
     restartBtn.addEventListener("click", () => {
       if (isAnimating) return;
       init();
@@ -1100,7 +1440,7 @@
       if (event.target === helpModal) helpModal.classList.remove("show");
     });
 
-    init();
+    bootstrapAuth();
   </script>
 </body>
 </html>
