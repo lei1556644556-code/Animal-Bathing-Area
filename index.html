@@ -992,7 +992,7 @@
     const MAX_LEVEL = 11;
     const BOARD_SIZE = ROWS * COLS;
     const ENERGY_CAP = 300;
-    const START_WEIGHTS = [90, 10, 10, 0, 0];
+    const START_WEIGHTS = [8, 1, 1, 0, 0];
     const END_WEIGHTS = [48, 26, 14, 8, 4];
     const COLORS = Array.from({ length: MAX_LEVEL }, (_, index) => `tile-${index + 1}`);
     const ANIMAL_ICONS = ["🐱", "🐷", "🦉", "🐻", "🐘", "🐑", "🐯", "🦊", "🐨", "🐸", "🦄"];
@@ -1086,6 +1086,8 @@
     let maxChain;
     let maxAnimalLevel;
     let bathCount;
+    let lastAwardedFragments;
+    let fragmentsAwardedThisRun;
     let brushCount;
     let currentPiece;
     let nextPiece;
@@ -1130,6 +1132,8 @@
       maxChain = 0;
       maxAnimalLevel = 0;
       bathCount = 0;
+      lastAwardedFragments = 0;
+      fragmentsAwardedThisRun = false;
       brushCount = 3;
       currentPiece = randomPiece();
       nextPiece = randomPiece();
@@ -1188,7 +1192,7 @@
       energyValueEl.textContent = energyUsed < ENERGY_CAP
         ? `已用 ${energyUsed}`
         : `已用 ${energyUsed} 难度最大`;
-      const fragments = Math.floor(score / 300);
+      const fragments = playerProfile?.fragments || 0;
       currencyEl.textContent = fragments;
       rewardCountEl.textContent = `x${fragments}`;
       brushBtn.textContent = brushMode ? "选择 3x3 区域" : "使用洗澡刷";
@@ -1325,6 +1329,7 @@
       return {
         user_id: currentUser.id,
         player_name: currentPlayerName,
+        fragments: 0,
         unlocked_animals: [],
         unlocked_themes: ["default"],
         active_theme: "default"
@@ -1335,7 +1340,7 @@
       if (!supabaseClient || !currentUser) return;
       const { data, error } = await supabaseClient
         .from(PROFILE_TABLE)
-        .select("player_name, unlocked_animals, unlocked_themes, active_theme")
+        .select("player_name, fragments, unlocked_animals, unlocked_themes, active_theme")
         .eq("user_id", currentUser.id)
         .maybeSingle();
       if (error) {
@@ -1345,6 +1350,7 @@
         playerProfile = {
           ...defaultProfile(),
           ...data,
+          fragments: data.fragments || 0,
           unlocked_animals: data.unlocked_animals || [],
           unlocked_themes: data.unlocked_themes || ["default"]
         };
@@ -1363,6 +1369,7 @@
         .upsert({
           user_id: currentUser.id,
           player_name: currentPlayerName,
+          fragments: playerProfile.fragments || 0,
           unlocked_animals: playerProfile.unlocked_animals,
           unlocked_themes: playerProfile.unlocked_themes,
           active_theme: playerProfile.active_theme,
@@ -1619,7 +1626,7 @@
 
     function renderThemes() {
       if (!themeListEl || !playerProfile) return;
-      const fragments = Math.floor(score / 300);
+      const fragments = playerProfile?.fragments || 0;
       themeListEl.innerHTML = THEMES.map((theme) => {
         const unlocked = playerProfile.unlocked_themes.includes(theme.id);
         const active = playerProfile.active_theme === theme.id;
@@ -1641,9 +1648,10 @@
       if (!playerProfile) return;
       const theme = THEMES.find(item => item.id === themeId);
       if (!theme) return;
-      const fragments = Math.floor(score / 300);
+      const fragments = playerProfile?.fragments || 0;
       if (!playerProfile.unlocked_themes.includes(themeId)) {
         if (fragments < theme.cost) return;
+        playerProfile.fragments = fragments - theme.cost;
         playerProfile.unlocked_themes = [...playerProfile.unlocked_themes, themeId];
         showFloatText(`主题解锁：${theme.name}`);
       }
@@ -1653,14 +1661,29 @@
       await savePlayerProfile();
     }
 
-    function showSettlement() {
+    async function awardRunFragments() {
+      if (!playerProfile || fragmentsAwardedThisRun) return Math.floor(score / 300);
+      const earned = Math.floor(score / 300);
+      lastAwardedFragments = earned;
+      fragmentsAwardedThisRun = true;
+      if (earned > 0) {
+        playerProfile.fragments = (playerProfile.fragments || 0) + earned;
+        await savePlayerProfile();
+        showFloatText(`获得 ${earned} 个碎片！`);
+      }
+      render();
+      return earned;
+    }
+
+    async function showSettlement() {
+      const earnedFragments = await awardRunFragments();
       settlementStatsEl.innerHTML = `
         <div class="settle-card">本局洗浴值<strong>${score}</strong></div>
         <div class="settle-card">历史最高<strong>${bestScore}</strong></div>
         <div class="settle-card">最高动物<strong>${maxAnimalLevel ? ANIMAL_NAMES[maxAnimalLevel - 1] : "暂无"}</strong></div>
         <div class="settle-card">最大连锁<strong>${maxChain}</strong></div>
         <div class="settle-card">洗护次数<strong>${bathCount}</strong></div>
-        <div class="settle-card">获得碎片<strong>${Math.floor(score / 300)}</strong></div>
+        <div class="settle-card">获得碎片<strong>${earnedFragments}</strong></div>
       `;
       settlementModal.classList.add("show");
     }
