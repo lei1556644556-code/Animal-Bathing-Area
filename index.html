@@ -286,6 +286,7 @@
       text-shadow: 0 3px 0 rgba(72, 52, 42, .52);
       box-shadow: inset 0 -8px rgba(0,0,0,.13), 0 6px 8px rgba(60, 35, 24, .24);
       user-select: none;
+      overflow: hidden;
     }
 
     .tile-piece::before,
@@ -310,17 +311,40 @@
 
     .tile-piece .face {
       position: absolute;
-      top: 39%;
-      width: 44%;
-      height: 12%;
+      top: 34%;
+      width: 60%;
+      height: 38%;
       border-radius: 999px;
-      background: rgba(73, 50, 42, .42);
+      background: rgba(255,255,255,.3);
+      z-index: 1;
     }
 
     .tile-piece .num {
+      position: absolute;
+      right: 5px;
+      bottom: 4px;
+      z-index: 3;
+      min-width: 24px;
+      height: 24px;
+      padding: 0 5px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,.86);
+      color: #5b4032;
+      font-size: clamp(13px, 3vw, 18px);
+      line-height: 1;
+      text-shadow: none;
+      box-shadow: 0 2px 0 rgba(74, 48, 37, .22);
+    }
+
+    .tile-piece .animal {
       position: relative;
-      z-index: 1;
-      margin-top: 28%;
+      z-index: 2;
+      font-size: clamp(28px, 7vw, 48px);
+      line-height: 1;
+      transform: translateY(-2px);
     }
 
     .tile-1 { background: #f2c14e; }
@@ -802,8 +826,8 @@
     const COLS = 5;
     const MAX_LEVEL = 11;
     const BOARD_SIZE = ROWS * COLS;
-    const BUCKET_CHANCE = 0.12;
     const COLORS = Array.from({ length: MAX_LEVEL }, (_, index) => `tile-${index + 1}`);
+    const ANIMAL_ICONS = ["🐱", "🐷", "🦉", "🐻", "🐘", "🐑", "🐯", "🦊", "🐨", "🐸", "🦄"];
     const SUPABASE_URL = "https://dkaabuxszrbnnrajnoaa.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_8UjZAjC-Ts2NiP8_NpmFdA_jv-CEzhd";
     const LEADERBOARD_TABLE = "leaderboard_scores";
@@ -856,15 +880,13 @@
     let activeDrop;
     let mergeMarks;
     let bornMark;
+    let pendingBucketAwards;
 
     function createEmptyGrid() {
       return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
     }
 
     function randomPiece() {
-      if (Math.random() < BUCKET_CHANCE) {
-        return { type: "bucket" };
-      }
       const ceiling = Math.min(7, 2 + Math.floor(score / 850));
       return { type: "animal", level: 1 + Math.floor(Math.random() * ceiling) };
     }
@@ -882,32 +904,9 @@
       activeDrop = null;
       mergeMarks = new Set();
       bornMark = null;
+      pendingBucketAwards = 0;
       messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
-      seedBoard();
       render();
-    }
-
-    function seedBoard() {
-      const fillCount = 8 + Math.floor(Math.random() * 7);
-      let placed = 0;
-      for (let r = ROWS - 1; r >= 0 && placed < fillCount; r--) {
-        for (let c = 0; c < COLS && placed < fillCount; c++) {
-          grid[r][c] = randomSeedAnimal(r, c);
-          placed++;
-        }
-      }
-    }
-
-    function randomSeedAnimal(row, col) {
-      for (let attempt = 0; attempt < 12; attempt++) {
-        const level = 1 + Math.floor(Math.random() * 7);
-        const left = grid[row]?.[col - 1];
-        const below = grid[row + 1]?.[col];
-        if (left?.level !== level && below?.level !== level) {
-          return { type: "animal", level };
-        }
-      }
-      return { type: "animal", level: 1 + Math.floor(Math.random() * 7) };
     }
 
     function render() {
@@ -963,10 +962,11 @@
       if (mini) el.classList.add("mini");
       if (piece.type === "bucket") {
         el.classList.add("bucket");
-        el.innerHTML = "<span class=\"num\">桶</span>";
+        el.innerHTML = "<span class=\"animal\">🪣</span><span class=\"num\">桶</span>";
       } else {
         el.classList.add(COLORS[piece.level - 1]);
-        el.innerHTML = `<span class="face"></span><span class="num">${piece.level}</span>`;
+        const icon = ANIMAL_ICONS[piece.level - 1] || "🐾";
+        el.innerHTML = `<span class="face"></span><span class="animal">${icon}</span><span class="num">${piece.level}</span>`;
       }
       return el;
     }
@@ -1083,8 +1083,8 @@
       if (error) {
         authMessageEl.textContent = `注册失败：${error.message}`;
       } else if (!data.session) {
-        authMessageEl.textContent = "账号已创建，请先到邮箱完成验证后再登录。";
         setAuthMode("login");
+        authMessageEl.textContent = "账号已创建。你的 Supabase 当前开启了邮箱验证，请先到邮箱确认账号后再登录；如果想注册后直接进入，请在 Supabase 关闭 Confirm email。";
       } else {
         authMessageEl.textContent = "注册成功。";
       }
@@ -1260,8 +1260,13 @@
         chain++;
         totalGain += await mergeGroup(next.group, next.target, chain);
         applyGravity();
+        while (pendingBucketAwards > 0) {
+          if (!trySpawnBucketAward()) break;
+          pendingBucketAwards--;
+        }
         render();
         await delay(160);
+        bornMark = null;
         next = null;
       }
       if (totalGain > 0) {
@@ -1295,7 +1300,23 @@
         bestScore = score;
         localStorage.setItem("animalBathBest", String(bestScore));
       }
+      if (group.length >= 4 || newLevel >= 8) {
+        pendingBucketAwards++;
+      }
       return gain;
+    }
+
+    function trySpawnBucketAward() {
+      const openColumns = [];
+      for (let c = 0; c < COLS; c++) {
+        if (getDropRow(c) >= 0) openColumns.push(c);
+      }
+      if (!openColumns.length) return false;
+      const col = openColumns[Math.floor(Math.random() * openColumns.length)];
+      const row = getDropRow(col);
+      grid[row][col] = { type: "bucket" };
+      bornMark = cellKey(row, col);
+      return true;
     }
 
     function applyGravity() {
