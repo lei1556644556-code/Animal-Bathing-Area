@@ -742,6 +742,7 @@
       </label>
       <button class="action" type="submit">创建账号</button>
     </form>
+    <button class="action secondary" id="guestBtn" type="button">游客进入</button>
     <div class="auth-note" id="authMessage">请先登录账号，登录后才能进入游戏并上传排行榜成绩。</div>
   </section>
 
@@ -843,6 +844,7 @@
     const signupNameEl = document.getElementById("signupName");
     const signupEmailEl = document.getElementById("signupEmail");
     const signupPasswordEl = document.getElementById("signupPassword");
+    const guestBtn = document.getElementById("guestBtn");
     const authMessageEl = document.getElementById("authMessage");
     const boardEl = document.getElementById("board");
     const scoreEl = document.getElementById("score");
@@ -868,6 +870,7 @@
     let supabaseClient;
     let currentUser;
     let currentPlayerName;
+    let isGuestUser;
     let grid;
     let score;
     let bestScore;
@@ -1037,7 +1040,8 @@
 
     function enterGame(user) {
       currentUser = user;
-      currentPlayerName = user.user_metadata?.player_name || user.email?.split("@")[0] || "玩家";
+      isGuestUser = Boolean(user.is_anonymous);
+      currentPlayerName = user.user_metadata?.player_name || user.email?.split("@")[0] || getGuestName();
       playerNameEl.textContent = currentPlayerName;
       authScreenEl.style.display = "none";
       gameAppEl.classList.remove("locked");
@@ -1048,9 +1052,19 @@
     function leaveGame() {
       currentUser = null;
       currentPlayerName = "";
+      isGuestUser = false;
       authScreenEl.style.display = "block";
       gameAppEl.classList.add("locked");
       leaderboardListEl.textContent = "登录后加载排行榜。";
+    }
+
+    function getGuestName() {
+      let name = localStorage.getItem("animalBathGuestName");
+      if (!name) {
+        name = `游客${Math.floor(1000 + Math.random() * 9000)}`;
+        localStorage.setItem("animalBathGuestName", name);
+      }
+      return name;
     }
 
     async function handleLogin(event) {
@@ -1090,6 +1104,18 @@
       }
     }
 
+    async function handleGuestLogin() {
+      if (!isSupabaseConfigured()) return;
+      authMessageEl.textContent = "正在以游客身份进入...";
+      const guestName = getGuestName();
+      const { error } = await supabaseClient.auth.signInAnonymously({
+        options: {
+          data: { player_name: guestName, guest: true }
+        }
+      });
+      authMessageEl.textContent = error ? `游客进入失败：${error.message}` : "游客登录成功。";
+    }
+
     async function submitScore() {
       if (!supabaseClient || !currentUser) {
         messageEl.textContent = "请先登录后再提交成绩。";
@@ -1101,20 +1127,36 @@
       }
       submitScoreBtn.disabled = true;
       messageEl.textContent = "正在提交排行榜成绩...";
+      const { data: existing, error: readError } = await supabaseClient
+        .from(LEADERBOARD_TABLE)
+        .select("score")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+      if (readError) {
+        submitScoreBtn.disabled = false;
+        messageEl.textContent = `读取历史最高分失败：${readError.message}`;
+        return;
+      }
+      if (existing && score <= existing.score) {
+        submitScoreBtn.disabled = false;
+        messageEl.textContent = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变。`;
+        return;
+      }
       const { error } = await supabaseClient
         .from(LEADERBOARD_TABLE)
-        .insert({
+        .upsert({
           user_id: currentUser.id,
           player_name: currentPlayerName,
           score,
-          fragments: Math.floor(score / 300)
-        });
+          fragments: Math.floor(score / 300),
+          updated_at: new Date().toISOString()
+        }, { onConflict: "user_id" });
       submitScoreBtn.disabled = false;
       if (error) {
         messageEl.textContent = `提交失败：${error.message}`;
         return;
       }
-      messageEl.textContent = "成绩已提交到排行榜。";
+      messageEl.textContent = isGuestUser ? "游客最高分已提交到排行榜，之后可以再做邮箱绑定。" : "账号最高分已提交到排行榜。";
       await loadLeaderboard();
     }
 
@@ -1123,9 +1165,9 @@
       leaderboardListEl.textContent = "排行榜加载中...";
       const { data, error } = await supabaseClient
         .from(LEADERBOARD_TABLE)
-        .select("player_name, score, fragments, created_at")
+        .select("player_name, score, fragments, updated_at")
         .order("score", { ascending: false })
-        .order("created_at", { ascending: true })
+        .order("updated_at", { ascending: true })
         .limit(20);
       if (error) {
         leaderboardListEl.textContent = `排行榜读取失败：${error.message}`;
@@ -1445,6 +1487,7 @@
     signupTab.addEventListener("click", () => setAuthMode("signup"));
     loginForm.addEventListener("submit", handleLogin);
     signupForm.addEventListener("submit", handleSignup);
+    guestBtn.addEventListener("click", handleGuestLogin);
     submitScoreBtn.addEventListener("click", submitScore);
     logoutBtn.addEventListener("click", async () => {
       if (supabaseClient) {
