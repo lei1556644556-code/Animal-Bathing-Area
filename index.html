@@ -770,7 +770,7 @@
 
     <section class="game">
       <div class="topbar">
-        <div class="energy"><span class="bolt">⚡</span><span>00:00</span></div>
+        <div class="energy"><span class="bolt">⚡</span><span id="energyValue">0/300</span></div>
         <div class="currency" id="currency">0</div>
       </div>
       <div class="board-wrap">
@@ -827,6 +827,9 @@
     const COLS = 5;
     const MAX_LEVEL = 11;
     const BOARD_SIZE = ROWS * COLS;
+    const ENERGY_CAP = 300;
+    const START_WEIGHTS = [90, 10, 10, 0, 0];
+    const END_WEIGHTS = [48, 26, 14, 8, 4];
     const COLORS = Array.from({ length: MAX_LEVEL }, (_, index) => `tile-${index + 1}`);
     const ANIMAL_ICONS = ["🐱", "🐷", "🦉", "🐻", "🐘", "🐑", "🐯", "🦊", "🐨", "🐸", "🦄"];
     const SUPABASE_URL = "https://dkaabuxszrbnnrajnoaa.supabase.co";
@@ -852,6 +855,7 @@
     const brushCountEl = document.getElementById("brushCount");
     const currencyEl = document.getElementById("currency");
     const rewardCountEl = document.getElementById("rewardCount");
+    const energyValueEl = document.getElementById("energyValue");
     const messageEl = document.getElementById("message");
     const currentPreviewEl = document.getElementById("currentPreview");
     const nextPreviewEl = document.getElementById("nextPreview");
@@ -873,6 +877,7 @@
     let isGuestUser;
     let grid;
     let score;
+    let energyUsed;
     let bestScore;
     let brushCount;
     let currentPiece;
@@ -890,13 +895,30 @@
     }
 
     function randomPiece() {
-      const ceiling = Math.min(7, 2 + Math.floor(score / 850));
-      return { type: "animal", level: 1 + Math.floor(Math.random() * ceiling) };
+      const weights = currentDropWeights();
+      const total = weights.reduce((sum, value) => sum + value, 0);
+      let roll = Math.random() * total;
+      for (let i = 0; i < weights.length; i++) {
+        roll -= weights[i];
+        if (roll <= 0) {
+          return { type: "animal", level: i + 1 };
+        }
+      }
+      return { type: "animal", level: 1 };
+    }
+
+    function currentDropWeights() {
+      const progress = Math.min(1, energyUsed / ENERGY_CAP);
+      return START_WEIGHTS.map((start, index) => {
+        const end = END_WEIGHTS[index];
+        return start + (end - start) * progress;
+      });
     }
 
     function init() {
       grid = createEmptyGrid();
       score = 0;
+      energyUsed = 0;
       bestScore = Number(localStorage.getItem("animalBathBest") || 0);
       brushCount = 3;
       currentPiece = randomPiece();
@@ -952,6 +974,7 @@
       scoreEl.textContent = score;
       bestEl.textContent = bestScore;
       brushCountEl.textContent = brushCount;
+      energyValueEl.textContent = `${Math.min(ENERGY_CAP, energyUsed)}/${ENERGY_CAP}`;
       const fragments = Math.floor(score / 300);
       currencyEl.textContent = fragments;
       rewardCountEl.textContent = `x${fragments}`;
@@ -1230,6 +1253,7 @@
       render();
       await delay(170);
       bornMark = null;
+      energyUsed += 1;
       currentPiece = nextPiece;
       nextPiece = randomPiece();
       let gained = await resolveBoard({ row, col });
