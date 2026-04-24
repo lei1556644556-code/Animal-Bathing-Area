@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>动物沐场</title>
+  <style>
+    :root {
+      --wall: #f3d9b6;
+      --tile: #c99f7b;
+      --line: #9b765f;
+      --pool: #92cbd5;
+      --pool-deep: #5fa8ba;
+      --ink: #4f3f35;
+      --muted: #8a7568;
+      --paper: #fff8ed;
+      --gold: #f2b94b;
+      --green: #62b784;
+      --danger: #d95f65;
+      --shadow: rgba(61, 42, 31, 0.22);
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(255,255,255,.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.16) 1px, transparent 1px),
+        radial-gradient(circle at 20% 12%, rgba(128, 196, 207, .28), transparent 24%),
+        linear-gradient(180deg, #f4dcc0, #d6ae8d);
+      background-size: 58px 58px, 58px 58px, auto, auto;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .app {
+      width: min(1180px, 100%);
+      min-height: 100vh;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 230px minmax(330px, 520px) 240px;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .panel {
+      background: rgba(255, 248, 237, .92);
+      border: 3px solid #d0a45e;
+      border-radius: 8px;
+      box-shadow: 0 10px 24px var(--shadow);
+    }
+
+    .side {
+      padding: 16px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: 36px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .help {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 0;
+      background: #5c514b;
+      color: white;
+      font-size: 21px;
+      font-weight: 800;
+      cursor: pointer;
+      vertical-align: 4px;
+    }
+
+    .stat {
+      background: #f8ead5;
+      border: 2px solid #e2c28c;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+
+    .stat .label {
+      color: #926b39;
+      font-weight: 800;
+      font-size: 17px;
+      margin-bottom: 4px;
+    }
+
+    .stat .value {
+      font-size: 28px;
+      font-weight: 900;
+    }
+
+    .message {
+      min-height: 54px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.45;
+      margin-top: 14px;
+    }
+
+    .game {
+      padding: 14px;
+      background: rgba(121, 174, 183, .48);
+      border: 4px solid #8a6b54;
+      border-radius: 8px;
+      box-shadow: inset 0 0 0 5px rgba(255,255,255,.26), 0 12px 30px var(--shadow);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .currency {
+      min-width: 128px;
+      background: #5d4a42;
+      color: #fff;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 20px;
+      font-weight: 900;
+      text-align: center;
+      box-shadow: inset 0 -3px rgba(0,0,0,.16);
+    }
+
+    .energy {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      color: #6b4b35;
+    }
+
+    .bolt {
+      color: #f0c12d;
+      font-size: 30px;
+      text-shadow: 0 2px #5f472e;
+    }
+
+    .board-wrap {
+      position: relative;
+      padding: 10px;
+      background: linear-gradient(180deg, #a5d7df, #69b4c4);
+      border: 4px solid #6c9ca6;
+      border-radius: 8px;
+    }
+
+    .drop-line {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: 54px;
+      border-top: 3px dashed rgba(205, 79, 92, .5);
+      pointer-events: none;
+    }
+
+    .board {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-rows: repeat(7, minmax(0, 1fr));
+      gap: 7px;
+      aspect-ratio: 5 / 7;
+    }
+
+    .falling-layer {
+      position: absolute;
+      inset: 10px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .falling-piece {
+      position: absolute;
+      left: calc(var(--col) * ((100% - 28px) / 5 + 7px));
+      top: calc(var(--start-row) * ((100% - 42px) / 7 + 7px));
+      width: calc((100% - 28px) / 5);
+      height: calc((100% - 42px) / 7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: dropFall .58s cubic-bezier(.16, .84, .28, 1) forwards;
+    }
+
+    @keyframes dropFall {
+      0% {
+        top: calc(var(--start-row) * ((100% - 42px) / 7 + 7px));
+        transform: scale(.92);
+      }
+      82% {
+        top: calc(var(--row) * ((100% - 42px) / 7 + 7px));
+        transform: scale(1.03);
+      }
+      100% {
+        top: calc(var(--row) * ((100% - 42px) / 7 + 7px));
+        transform: scale(1);
+      }
+    }
+
+    .cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: rgba(212, 245, 250, .48);
+      border: 2px solid rgba(255,255,255,.24);
+      cursor: pointer;
+      min-width: 0;
+      min-height: 0;
+      transition: transform .12s ease, background .12s ease, outline .12s ease;
+    }
+
+    .cell:hover {
+      transform: translateY(-2px);
+      background: rgba(229, 251, 255, .75);
+    }
+
+    .cell.target {
+      outline: 4px solid #ffe16d;
+      outline-offset: -5px;
+    }
+
+    .cell.brush-target {
+      outline: 4px solid #ef786e;
+      outline-offset: -5px;
+    }
+
+    .cell.merging {
+      outline: 4px solid #fff07d;
+      outline-offset: -5px;
+      animation: mergePulse .26s ease-in-out infinite alternate;
+    }
+
+    .cell.born .tile-piece {
+      animation: bornPop .22s cubic-bezier(.2, 1.35, .38, 1) both;
+    }
+
+    @keyframes mergePulse {
+      from {
+        transform: scale(.96);
+        filter: brightness(1);
+      }
+      to {
+        transform: scale(1.05);
+        filter: brightness(1.2);
+      }
+    }
+
+    @keyframes bornPop {
+      0% {
+        transform: scale(.35) rotate(-5deg);
+        opacity: .45;
+      }
+      100% {
+        transform: scale(1) rotate(0);
+        opacity: 1;
+      }
+    }
+
+    .tile-piece {
+      width: 88%;
+      height: 88%;
+      border-radius: 18px 18px 14px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-weight: 950;
+      font-size: clamp(20px, 6vw, 38px);
+      color: white;
+      text-shadow: 0 3px 0 rgba(72, 52, 42, .52);
+      box-shadow: inset 0 -8px rgba(0,0,0,.13), 0 6px 8px rgba(60, 35, 24, .24);
+      user-select: none;
+    }
+
+    .tile-piece::before,
+    .tile-piece::after {
+      content: "";
+      position: absolute;
+      top: 16%;
+      width: 18%;
+      height: 18%;
+      border-radius: 50%;
+      background: rgba(255,255,255,.7);
+      box-shadow: inset 0 -3px rgba(0,0,0,.15);
+    }
+
+    .tile-piece::before {
+      left: 22%;
+    }
+
+    .tile-piece::after {
+      right: 22%;
+    }
+
+    .tile-piece .face {
+      position: absolute;
+      top: 39%;
+      width: 44%;
+      height: 12%;
+      border-radius: 999px;
+      background: rgba(73, 50, 42, .42);
+    }
+
+    .tile-piece .num {
+      position: relative;
+      z-index: 1;
+      margin-top: 28%;
+    }
+
+    .tile-1 { background: #f2c14e; }
+    .tile-2 { background: #ef8ea7; }
+    .tile-3 { background: #54bfaa; }
+    .tile-4 { background: #b46b4e; }
+    .tile-5 { background: #83c9e8; }
+    .tile-6 { background: #f4eee2; color: #6a5447; text-shadow: 0 2px rgba(255,255,255,.8); }
+    .tile-7 { background: #dd8f2f; }
+    .tile-8 { background: #d86d43; }
+    .tile-9 { background: #8d8a84; }
+    .tile-10 { background: #75b74d; }
+    .tile-11 { background: #8c55bb; }
+
+    .bucket {
+      background: #b78a55;
+      color: #fff;
+      font-size: clamp(18px, 5vw, 30px);
+      text-shadow: 0 2px rgba(76, 48, 25, .5);
+    }
+
+    .bucket::before {
+      left: 18%;
+      width: 64%;
+      height: 24%;
+      border: 5px solid rgba(255,255,255,.7);
+      border-bottom: 0;
+      background: transparent;
+      border-radius: 50% 50% 0 0;
+    }
+
+    .bucket::after {
+      display: none;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .preview-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .preview {
+      background: rgba(255, 248, 237, .9);
+      border: 2px solid #d3a763;
+      border-radius: 8px;
+      min-height: 98px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-weight: 800;
+      color: #7b5c40;
+    }
+
+    .mini {
+      width: 58px;
+      height: 58px;
+    }
+
+    button.action {
+      border: 0;
+      border-radius: 8px;
+      padding: 13px 12px;
+      background: #f1c15d;
+      color: #573c28;
+      font-weight: 950;
+      font-size: 17px;
+      cursor: pointer;
+      box-shadow: inset 0 -4px rgba(113, 76, 33, .18), 0 5px 0 #9f7040;
+      transition: transform .1s ease, filter .1s ease;
+    }
+
+    button.action:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+    }
+
+    button.action:active {
+      transform: translateY(3px);
+      box-shadow: inset 0 -2px rgba(113, 76, 33, .18), 0 2px 0 #9f7040;
+    }
+
+    button.secondary {
+      background: #87c8d2;
+      box-shadow: inset 0 -4px rgba(54, 106, 118, .18), 0 5px 0 #4f8794;
+    }
+
+    button.danger {
+      background: #ef9f8e;
+      box-shadow: inset 0 -4px rgba(131, 61, 48, .18), 0 5px 0 #b46b5b;
+    }
+
+    .reward {
+      padding: 16px;
+      min-height: 280px;
+    }
+
+    .reward h2 {
+      margin: 0 0 12px;
+      color: #a06c17;
+      font-size: 25px;
+      text-align: center;
+    }
+
+    .item-card {
+      background: #f0e8dc;
+      border-radius: 8px;
+      border: 2px solid #d5bd95;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .glow-stick {
+      width: 88px;
+      height: 88px;
+      margin: 8px auto 12px;
+      border-radius: 16px;
+      background:
+        linear-gradient(135deg, transparent 0 38%, rgba(255,255,255,.7) 39% 42%, transparent 43%),
+        linear-gradient(135deg, #7fd8e6 0 50%, #9a67c8 51%);
+      position: relative;
+      box-shadow: inset 0 -6px rgba(0,0,0,.12);
+    }
+
+    .glow-stick::before,
+    .glow-stick::after {
+      content: "";
+      position: absolute;
+      bottom: 16px;
+      width: 13px;
+      height: 58px;
+      border-radius: 999px;
+      transform: rotate(-28deg);
+    }
+
+    .glow-stick::before {
+      left: 28px;
+      background: #9be5ef;
+    }
+
+    .glow-stick::after {
+      right: 28px;
+      background: #ef6aa9;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(55, 38, 31, .5);
+      z-index: 10;
+      padding: 18px;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .dialog {
+      width: min(720px, 100%);
+      max-height: 86vh;
+      overflow: auto;
+      padding: 22px;
+      background: var(--paper);
+      border: 4px solid #d0a45e;
+      border-radius: 8px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.3);
+    }
+
+    .dialog h2 {
+      margin: 0 0 10px;
+      text-align: center;
+    }
+
+    .dialog p {
+      line-height: 1.7;
+      margin: 8px 0;
+    }
+
+    .game-over {
+      position: absolute;
+      inset: 10px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(68, 47, 38, .55);
+      border-radius: 8px;
+      color: white;
+      font-size: 36px;
+      font-weight: 950;
+      text-shadow: 0 3px rgba(0,0,0,.35);
+      z-index: 3;
+    }
+
+    .game-over.show {
+      display: flex;
+    }
+
+    @media (max-width: 920px) {
+      body {
+        align-items: flex-start;
+      }
+
+      .app {
+        grid-template-columns: 1fr;
+        max-width: 560px;
+        padding: 12px;
+      }
+
+      .side,
+      .reward {
+        min-height: auto;
+      }
+
+      h1 {
+        font-size: 32px;
+      }
+
+      .reward {
+        display: none;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .app {
+        padding: 8px;
+      }
+
+      .game {
+        padding: 10px;
+      }
+
+      .board {
+        gap: 5px;
+      }
+
+      .controls {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="panel side">
+      <h1>动物沐场 <button class="help" id="helpBtn" title="帮助">?</button></h1>
+      <div class="stat">
+        <div class="label">本局洗浴值</div>
+        <div class="value" id="score">0</div>
+      </div>
+      <div class="stat">
+        <div class="label">历史最高洗浴值</div>
+        <div class="value" id="best">0</div>
+      </div>
+      <div class="stat">
+        <div class="label">洗澡刷</div>
+        <div class="value" id="brushCount">3</div>
+      </div>
+      <div class="message" id="message">点击任意列投放动物方块，连在一起的同等级动物会自动合成。</div>
+    </section>
+
+    <section class="game">
+      <div class="topbar">
+        <div class="energy"><span class="bolt">⚡</span><span>00:00</span></div>
+        <div class="currency" id="currency">0</div>
+      </div>
+      <div class="board-wrap">
+        <div class="drop-line"></div>
+        <div class="board" id="board"></div>
+        <div class="falling-layer" id="fallingLayer"></div>
+        <div class="game-over" id="gameOver">沐场已满</div>
+      </div>
+      <div class="preview-row">
+        <div class="preview">
+          <span>当前方块</span>
+          <div id="currentPreview"></div>
+        </div>
+        <div class="preview">
+          <span>下一方块</span>
+          <div id="nextPreview"></div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="action secondary" id="brushBtn">使用洗澡刷</button>
+        <button class="action danger" id="restartBtn">重新开始</button>
+      </div>
+    </section>
+
+    <aside class="panel reward">
+      <h2>本期累计获得</h2>
+      <div class="item-card">
+        <div>应援荧光棒碎片</div>
+        <div class="glow-stick"></div>
+        <strong id="rewardCount">x0</strong>
+      </div>
+    </aside>
+  </main>
+
+  <div class="modal" id="helpModal">
+    <div class="dialog">
+      <h2>帮助</h2>
+      <p>点击一列，当前动物会下落到该列最低的空位。</p>
+      <p>相同等级动物上下左右相邻时会合成：两个 +1，三个 +2，四个及以上 +3，最高等级为 11。</p>
+      <p>合成后动物会下落补位，并继续触发连锁合成。万能木桶会继承它正上方动物的等级并参与合成。</p>
+      <p>洗澡刷会处理点击位置附近的 3x3 区域：先按等级从高到低重排，再按行、按列两两合成。</p>
+      <button class="action" id="closeHelp">知道了</button>
+    </div>
+  </div>
+
+  <script>
+    const ROWS = 7;
+    const COLS = 5;
+    const MAX_LEVEL = 11;
+    const BOARD_SIZE = ROWS * COLS;
+    const BUCKET_CHANCE = 0.12;
+    const COLORS = Array.from({ length: MAX_LEVEL }, (_, index) => `tile-${index + 1}`);
+
+    const boardEl = document.getElementById("board");
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+    const brushCountEl = document.getElementById("brushCount");
+    const currencyEl = document.getElementById("currency");
+    const rewardCountEl = document.getElementById("rewardCount");
+    const messageEl = document.getElementById("message");
+    const currentPreviewEl = document.getElementById("currentPreview");
+    const nextPreviewEl = document.getElementById("nextPreview");
+    const fallingLayerEl = document.getElementById("fallingLayer");
+    const brushBtn = document.getElementById("brushBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const helpBtn = document.getElementById("helpBtn");
+    const helpModal = document.getElementById("helpModal");
+    const closeHelp = document.getElementById("closeHelp");
+    const gameOverEl = document.getElementById("gameOver");
+
+    let grid;
+    let score;
+    let bestScore;
+    let brushCount;
+    let currentPiece;
+    let nextPiece;
+    let brushMode;
+    let gameOver;
+    let isAnimating;
+    let activeDrop;
+    let mergeMarks;
+    let bornMark;
+
+    function createEmptyGrid() {
+      return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
+    }
+
+    function randomPiece() {
+      if (Math.random() < BUCKET_CHANCE) {
+        return { type: "bucket" };
+      }
+      const ceiling = Math.min(7, 2 + Math.floor(score / 850));
+      return { type: "animal", level: 1 + Math.floor(Math.random() * ceiling) };
+    }
+
+    function init() {
+      grid = createEmptyGrid();
+      score = 0;
+      bestScore = Number(localStorage.getItem("animalBathBest") || 0);
+      brushCount = 3;
+      currentPiece = randomPiece();
+      nextPiece = randomPiece();
+      brushMode = false;
+      gameOver = false;
+      isAnimating = false;
+      activeDrop = null;
+      mergeMarks = new Set();
+      bornMark = null;
+      messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
+      seedBoard();
+      render();
+    }
+
+    function seedBoard() {
+      const fillCount = 8 + Math.floor(Math.random() * 7);
+      let placed = 0;
+      for (let r = ROWS - 1; r >= 0 && placed < fillCount; r--) {
+        for (let c = 0; c < COLS && placed < fillCount; c++) {
+          grid[r][c] = randomSeedAnimal(r, c);
+          placed++;
+        }
+      }
+    }
+
+    function randomSeedAnimal(row, col) {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const level = 1 + Math.floor(Math.random() * 7);
+        const left = grid[row]?.[col - 1];
+        const below = grid[row + 1]?.[col];
+        if (left?.level !== level && below?.level !== level) {
+          return { type: "animal", level };
+        }
+      }
+      return { type: "animal", level: 1 + Math.floor(Math.random() * 7) };
+    }
+
+    function render() {
+      boardEl.innerHTML = "";
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = document.createElement("button");
+          cell.className = "cell";
+          cell.type = "button";
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          cell.title = `第 ${c + 1} 列`;
+          cell.addEventListener("click", () => handleCellClick(r, c));
+          const key = cellKey(r, c);
+          if (mergeMarks.has(key)) {
+            cell.classList.add("merging");
+          }
+          if (bornMark === key) {
+            cell.classList.add("born");
+          }
+          if (brushMode && isInsideBrushPreview(r, c)) {
+            cell.classList.add("brush-target");
+          }
+          const targetRow = getDropRow(c);
+          if (!brushMode && targetRow === r && !gameOver) {
+            cell.classList.add("target");
+          }
+          const piece = grid[r][c];
+          if (piece) {
+            cell.appendChild(renderPiece(piece));
+          }
+          boardEl.appendChild(cell);
+        }
+      }
+      renderFallingPiece();
+      currentPreviewEl.innerHTML = "";
+      currentPreviewEl.appendChild(renderPiece(currentPiece, true));
+      nextPreviewEl.innerHTML = "";
+      nextPreviewEl.appendChild(renderPiece(nextPiece, true));
+      scoreEl.textContent = score;
+      bestEl.textContent = bestScore;
+      brushCountEl.textContent = brushCount;
+      const fragments = Math.floor(score / 300);
+      currencyEl.textContent = fragments;
+      rewardCountEl.textContent = `x${fragments}`;
+      brushBtn.textContent = brushMode ? "选择 3x3 区域" : "使用洗澡刷";
+      gameOverEl.classList.toggle("show", gameOver);
+    }
+
+    function renderPiece(piece, mini = false) {
+      const el = document.createElement("div");
+      el.className = "tile-piece";
+      if (mini) el.classList.add("mini");
+      if (piece.type === "bucket") {
+        el.classList.add("bucket");
+        el.innerHTML = "<span class=\"num\">桶</span>";
+      } else {
+        el.classList.add(COLORS[piece.level - 1]);
+        el.innerHTML = `<span class="face"></span><span class="num">${piece.level}</span>`;
+      }
+      return el;
+    }
+
+    function renderFallingPiece() {
+      fallingLayerEl.innerHTML = "";
+      if (!activeDrop) {
+        const preview = document.createElement("div");
+        preview.className = "falling-piece";
+        preview.style.setProperty("--col", "2");
+        preview.style.setProperty("--row", "-1");
+        preview.style.setProperty("--start-row", "-1");
+        preview.style.animation = "none";
+        preview.appendChild(renderPiece(currentPiece));
+        fallingLayerEl.appendChild(preview);
+        return;
+      }
+      const falling = document.createElement("div");
+      falling.className = "falling-piece";
+      falling.style.setProperty("--col", String(activeDrop.col));
+      falling.style.setProperty("--row", String(activeDrop.row));
+      falling.style.setProperty("--start-row", "-1");
+      falling.appendChild(renderPiece(activeDrop.piece));
+      fallingLayerEl.appendChild(falling);
+    }
+
+    function cellKey(row, col) {
+      return `${row},${col}`;
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function handleCellClick(row, col) {
+      if (gameOver || isAnimating) return;
+      if (brushMode) {
+        await useBrush(row, col);
+        return;
+      }
+      await dropPiece(col);
+    }
+
+    function getDropRow(col) {
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (!grid[r][col]) return r;
+      }
+      return -1;
+    }
+
+    async function dropPiece(col) {
+      const row = getDropRow(col);
+      if (row < 0) {
+        messageEl.textContent = "这一列已经满了，换一列试试。";
+        return;
+      }
+      isAnimating = true;
+      const droppedPiece = { ...currentPiece };
+      activeDrop = { piece: droppedPiece, row, col };
+      messageEl.textContent = "动物方块正在下落。";
+      render();
+      await delay(620);
+      activeDrop = null;
+      grid[row][col] = droppedPiece;
+      bornMark = cellKey(row, col);
+      render();
+      await delay(170);
+      bornMark = null;
+      currentPiece = nextPiece;
+      nextPiece = randomPiece();
+      let gained = await resolveBoard({ row, col });
+      if (gained === 0) {
+        messageEl.textContent = "方块已落下，继续找能连成一片的位置。";
+      }
+      checkGameOver();
+      isAnimating = false;
+      render();
+    }
+
+    function getEffectiveLevel(row, col) {
+      const piece = grid[row]?.[col];
+      if (!piece) return null;
+      if (piece.type === "animal") return piece.level;
+      if (piece.type === "bucket") {
+        const above = grid[row - 1]?.[col];
+        if (above?.type === "animal") return above.level;
+      }
+      return null;
+    }
+
+    function findGroup(startRow, startCol) {
+      const level = getEffectiveLevel(startRow, startCol);
+      if (!level) return [];
+      const visited = new Set();
+      const queue = [[startRow, startCol]];
+      const group = [];
+      while (queue.length) {
+        const [r, c] = queue.shift();
+        const key = `${r},${c}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        if (getEffectiveLevel(r, c) !== level) continue;
+        group.push({ row: r, col: c });
+        [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr, dc]) => {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+            queue.push([nr, nc]);
+          }
+        });
+      }
+      return group;
+    }
+
+    function findFirstGroup() {
+      for (let r = ROWS - 1; r >= 0; r--) {
+        for (let c = 0; c < COLS; c++) {
+          const group = findGroup(r, c);
+          if (group.length >= 2) {
+            return { group, target: group[0] };
+          }
+        }
+      }
+      return null;
+    }
+
+    async function resolveBoard(priorityTarget = null) {
+      let chain = 0;
+      let totalGain = 0;
+      let next = null;
+      if (priorityTarget) {
+        const group = findGroup(priorityTarget.row, priorityTarget.col);
+        if (group.length >= 2) {
+          next = { group, target: priorityTarget };
+        }
+      }
+      while (next || (next = findFirstGroup())) {
+        chain++;
+        totalGain += await mergeGroup(next.group, next.target, chain);
+        applyGravity();
+        render();
+        await delay(160);
+        next = null;
+      }
+      if (totalGain > 0) {
+        messageEl.textContent = chain > 1
+          ? `漂亮，触发 ${chain} 段连锁，获得 ${totalGain} 洗浴值。`
+          : `合成成功，获得 ${totalGain} 洗浴值。`;
+      }
+      return totalGain;
+    }
+
+    async function mergeGroup(group, target, chain) {
+      const baseLevel = getEffectiveLevel(target.row, target.col) || getEffectiveLevel(group[0].row, group[0].col);
+      const add = group.length >= 4 ? 3 : group.length === 3 ? 2 : 1;
+      const newLevel = Math.min(MAX_LEVEL, baseLevel + add);
+      mergeMarks = new Set(group.map(({ row, col }) => cellKey(row, col)));
+      render();
+      await delay(360);
+      group.forEach(({ row, col }) => {
+        grid[row][col] = null;
+      });
+      grid[target.row][target.col] = { type: "animal", level: newLevel };
+      mergeMarks = new Set();
+      bornMark = cellKey(target.row, target.col);
+      render();
+      await delay(220);
+      bornMark = null;
+      const multiplier = 1 + (chain - 1) * 0.5;
+      const gain = Math.round(newLevel * newLevel * 10 * multiplier);
+      score += gain;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem("animalBathBest", String(bestScore));
+      }
+      return gain;
+    }
+
+    function applyGravity() {
+      for (let c = 0; c < COLS; c++) {
+        const pieces = [];
+        for (let r = ROWS - 1; r >= 0; r--) {
+          if (grid[r][c]) pieces.push(grid[r][c]);
+        }
+        for (let r = ROWS - 1; r >= 0; r--) {
+          grid[r][c] = pieces[ROWS - 1 - r] || null;
+        }
+      }
+    }
+
+    function isInsideBrushPreview(row, col) {
+      return false;
+    }
+
+    async function useBrush(centerRow, centerCol) {
+      if (isAnimating) return;
+      if (brushCount <= 0) {
+        brushMode = false;
+        messageEl.textContent = "洗澡刷已经用完了。";
+        render();
+        return;
+      }
+      isAnimating = true;
+      brushCount--;
+      const cells = brushCells(centerRow, centerCol);
+      mergeMarks = new Set(cells.map(({ row, col }) => cellKey(row, col)));
+      messageEl.textContent = "洗澡刷正在整理选中的 3x3 区域。";
+      render();
+      await delay(300);
+      mergeMarks = new Set();
+      const animals = [];
+      cells.forEach(({ row, col }) => {
+        const piece = grid[row][col];
+        if (piece?.type === "animal") animals.push({ ...piece });
+        grid[row][col] = null;
+      });
+      animals.sort((a, b) => b.level - a.level);
+      const orderedCells = [...cells].sort((a, b) => b.row - a.row || a.col - b.col);
+      animals.forEach((piece, index) => {
+        const pos = orderedCells[index];
+        if (pos) grid[pos.row][pos.col] = piece;
+      });
+      brushPairMerge(cells, "row");
+      applyGravity();
+      brushPairMerge(cells, "col");
+      applyGravity();
+      brushMode = false;
+      messageEl.textContent = "洗澡刷已清理 3x3 区域，并触发后续下落检测。";
+      render();
+      await delay(180);
+      await resolveBoard();
+      checkGameOver();
+      isAnimating = false;
+      render();
+    }
+
+    function brushCells(centerRow, centerCol) {
+      const rowStart = Math.max(0, Math.min(ROWS - 3, centerRow - 1));
+      const colStart = Math.max(0, Math.min(COLS - 3, centerCol - 1));
+      const cells = [];
+      for (let r = rowStart; r < rowStart + 3; r++) {
+        for (let c = colStart; c < colStart + 3; c++) {
+          cells.push({ row: r, col: c });
+        }
+      }
+      return cells;
+    }
+
+    function brushPairMerge(cells, axis) {
+      const groups = new Map();
+      cells.forEach((cell) => {
+        const key = axis === "row" ? cell.row : cell.col;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(cell);
+      });
+      groups.forEach((line) => {
+        line.sort((a, b) => axis === "row" ? a.col - b.col : b.row - a.row);
+        for (let i = 0; i < line.length - 1; i++) {
+          const a = line[i];
+          const b = line[i + 1];
+          const pa = grid[a.row][a.col];
+          const pb = grid[b.row][b.col];
+          if (pa?.type === "animal" && pb?.type === "animal" && pa.level === pb.level) {
+            grid[a.row][a.col] = { type: "animal", level: Math.min(MAX_LEVEL, pa.level + 1) };
+            grid[b.row][b.col] = null;
+            addScoreForBrush(pa.level + 1);
+            i++;
+          }
+        }
+      });
+    }
+
+    function addScoreForBrush(level) {
+      const finalLevel = Math.min(MAX_LEVEL, level);
+      const gain = finalLevel * finalLevel * 10;
+      score += gain;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem("animalBathBest", String(bestScore));
+      }
+    }
+
+    function checkGameOver() {
+      gameOver = Array.from({ length: COLS }, (_, c) => getDropRow(c)).every(row => row < 0);
+      if (gameOver) {
+        messageEl.textContent = "棋盘已经满了，可以重新开始再冲一次高分。";
+      }
+    }
+
+    brushBtn.addEventListener("click", () => {
+      if (gameOver || isAnimating) return;
+      if (brushCount <= 0) {
+        messageEl.textContent = "洗澡刷已经用完了。";
+        return;
+      }
+      brushMode = !brushMode;
+      messageEl.textContent = brushMode ? "选择一个格子作为 3x3 区域中心。" : "已取消洗澡刷。";
+      render();
+    });
+
+    restartBtn.addEventListener("click", () => {
+      if (isAnimating) return;
+      init();
+    });
+    helpBtn.addEventListener("click", () => helpModal.classList.add("show"));
+    closeHelp.addEventListener("click", () => helpModal.classList.remove("show"));
+    helpModal.addEventListener("click", (event) => {
+      if (event.target === helpModal) helpModal.classList.remove("show");
+    });
+
+    init();
+  </script>
+</body>
+</html>
