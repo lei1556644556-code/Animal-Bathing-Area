@@ -1635,7 +1635,7 @@
         return `
           <div class="theme-card ${active ? "active" : ""}">
             <strong>${theme.name}</strong>
-            <button type="button" data-theme="${theme.id}" ${(!unlocked && !canBuy) || active ? "disabled" : ""}>${buttonText}</button>
+            <button type="button" data-theme="${theme.id}" ${active ? "disabled" : ""}>${buttonText}</button>
           </div>
         `;
       }).join("");
@@ -1650,7 +1650,12 @@
       if (!theme) return;
       const fragments = playerProfile?.fragments || 0;
       if (!playerProfile.unlocked_themes.includes(themeId)) {
-        if (fragments < theme.cost) return;
+        if (fragments < theme.cost) {
+          const need = theme.cost - fragments;
+          messageEl.textContent = `碎片不足，还差 ${need} 个碎片才能解锁${theme.name}。`;
+          showFloatText(`还差 ${need} 个碎片`);
+          return;
+        }
         playerProfile.fragments = fragments - theme.cost;
         playerProfile.unlocked_themes = [...playerProfile.unlocked_themes, themeId];
         showFloatText(`主题解锁：${theme.name}`);
