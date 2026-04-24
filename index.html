@@ -640,6 +640,41 @@
       cursor: pointer;
     }
 
+    .upgrade-box {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: #fffaf0;
+      border: 2px solid #e2c28c;
+      border-radius: 8px;
+    }
+
+    .upgrade-box.show {
+      display: grid;
+      gap: 9px;
+    }
+
+    .upgrade-title {
+      font-weight: 900;
+      color: #926b39;
+    }
+
+    .upgrade-box input {
+      width: 100%;
+      border: 2px solid #d3a763;
+      border-radius: 8px;
+      padding: 9px;
+      font: inherit;
+      background: white;
+      color: var(--ink);
+    }
+
+    .upgrade-box .hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
     .leaderboard {
       margin-top: 14px;
       text-align: left;
@@ -765,6 +800,14 @@
         <span id="playerName">未登录</span>
         <button class="small-button" id="logoutBtn" type="button">退出</button>
       </div>
+      <div class="upgrade-box" id="upgradeBox">
+        <div class="upgrade-title">游客账号绑定</div>
+        <input id="bindEmailInput" type="email" placeholder="输入邮箱">
+        <button class="small-button" id="bindEmailBtn" type="button">发送验证邮件</button>
+        <input id="bindPasswordInput" type="password" minlength="6" placeholder="验证邮箱后设置密码">
+        <button class="small-button" id="setPasswordBtn" type="button">设置密码</button>
+        <div class="hint" id="upgradeMessage">绑定邮箱后，排行榜最高分会保留在这个账号上。</div>
+      </div>
       <div class="message" id="message">点击任意列投放动物方块，连在一起的同等级动物会自动合成。</div>
     </section>
 
@@ -870,6 +913,12 @@
     const playerNameEl = document.getElementById("playerName");
     const logoutBtn = document.getElementById("logoutBtn");
     const leaderboardListEl = document.getElementById("leaderboardList");
+    const upgradeBoxEl = document.getElementById("upgradeBox");
+    const bindEmailInput = document.getElementById("bindEmailInput");
+    const bindEmailBtn = document.getElementById("bindEmailBtn");
+    const bindPasswordInput = document.getElementById("bindPasswordInput");
+    const setPasswordBtn = document.getElementById("setPasswordBtn");
+    const upgradeMessageEl = document.getElementById("upgradeMessage");
 
     let supabaseClient;
     let currentUser;
@@ -1070,6 +1119,7 @@
       playerNameEl.textContent = currentPlayerName;
       authScreenEl.style.display = "none";
       gameAppEl.classList.remove("locked");
+      renderAccountUpgrade();
       if (!grid) init();
       loadLeaderboard();
     }
@@ -1080,7 +1130,16 @@
       isGuestUser = false;
       authScreenEl.style.display = "block";
       gameAppEl.classList.add("locked");
+      upgradeBoxEl.classList.remove("show");
       leaderboardListEl.textContent = "登录后加载排行榜。";
+    }
+
+    function renderAccountUpgrade() {
+      if (!currentUser) return;
+      upgradeBoxEl.classList.toggle("show", isGuestUser);
+      if (isGuestUser) {
+        upgradeMessageEl.textContent = "绑定邮箱后，排行榜最高分会保留在这个账号上。邮箱验证完成后再设置密码。";
+      }
     }
 
     function getGuestName() {
@@ -1139,6 +1198,50 @@
         }
       });
       authMessageEl.textContent = error ? `游客进入失败：${error.message}` : "游客登录成功。";
+    }
+
+    async function handleBindEmail() {
+      if (!supabaseClient || !currentUser || !isGuestUser) return;
+      const email = bindEmailInput.value.trim();
+      if (!email) {
+        upgradeMessageEl.textContent = "请先输入邮箱。";
+        return;
+      }
+      bindEmailBtn.disabled = true;
+      upgradeMessageEl.textContent = "正在发送验证邮件...";
+      const { error } = await supabaseClient.auth.updateUser(
+        { email },
+        { emailRedirectTo: window.location.href.split("#")[0] }
+      );
+      bindEmailBtn.disabled = false;
+      if (error) {
+        upgradeMessageEl.textContent = `绑定失败：${error.message}`;
+        return;
+      }
+      upgradeMessageEl.textContent = "验证邮件已发送。请打开邮箱点击确认链接，回到游戏后再设置密码。";
+    }
+
+    async function handleSetPassword() {
+      if (!supabaseClient || !currentUser || !isGuestUser) return;
+      const password = bindPasswordInput.value;
+      if (password.length < 6) {
+        upgradeMessageEl.textContent = "密码至少需要 6 位。";
+        return;
+      }
+      setPasswordBtn.disabled = true;
+      upgradeMessageEl.textContent = "正在设置密码...";
+      const { data, error } = await supabaseClient.auth.updateUser({ password });
+      setPasswordBtn.disabled = false;
+      if (error) {
+        upgradeMessageEl.textContent = `设置失败：${error.message}。如果还没验证邮箱，请先点邮件里的确认链接。`;
+        return;
+      }
+      currentUser = data.user;
+      isGuestUser = Boolean(data.user?.is_anonymous);
+      currentPlayerName = data.user?.user_metadata?.player_name || data.user?.email?.split("@")[0] || currentPlayerName;
+      playerNameEl.textContent = currentPlayerName;
+      renderAccountUpgrade();
+      upgradeMessageEl.textContent = "密码已设置，之后可以用邮箱和密码登录。";
     }
 
     async function submitScore() {
@@ -1515,6 +1618,8 @@
     signupForm.addEventListener("submit", handleSignup);
     guestBtn.addEventListener("click", handleGuestLogin);
     submitScoreBtn.addEventListener("click", submitScore);
+    bindEmailBtn.addEventListener("click", handleBindEmail);
+    setPasswordBtn.addEventListener("click", handleSetPassword);
     logoutBtn.addEventListener("click", async () => {
       if (supabaseClient) {
         await supabaseClient.auth.signOut();
