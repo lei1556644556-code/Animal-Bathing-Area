@@ -163,7 +163,7 @@
       position: absolute;
       left: 10px;
       right: 10px;
-      top: calc(10px + ((100% - 20px - 42px) / 7) + 7px);
+      top: calc(10px + (((100% - 20px - 42px) / 7) * 1.5) + 7px);
       border-top: 3px dashed rgba(205, 79, 92, .5);
       pointer-events: none;
     }
@@ -1900,8 +1900,19 @@
       }
       if (existing && score <= existing.score) {
         submitScoreBtn.disabled = false;
-        messageEl.textContent = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变。`;
-        await submitDailyScoreOnly();
+        const dailyUpdated = await submitDailyScoreOnly();
+        const totalRank = await queryPlayerRank(LEADERBOARD_TABLE, existing.score);
+        const dailyRank = await queryPlayerRank(DAILY_LEADERBOARD_TABLE, Math.max(score, existing.score), beijingDateString());
+        const rankParts = [];
+        if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
+        if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
+        messageEl.textContent = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
+        showFloatText(totalRank ? `未刷新总榜，当前第 ${totalRank} 名` : "本局未刷新最高分");
+        currentBoardMode = "total";
+        totalBoardTab.classList.add("active");
+        dailyBoardTab.classList.remove("active");
+        await loadLeaderboard();
+        showScreen("leaderboard");
         return;
       }
       const { error } = await supabaseClient
@@ -1918,9 +1929,20 @@
         messageEl.textContent = `提交失败：${error.message}`;
         return;
       }
-      await submitDailyScoreOnly();
-      messageEl.textContent = isGuestUser ? "游客最高分已提交到排行榜，之后可以再做邮箱绑定。" : "账号最高分已提交到排行榜。";
+      const dailyUpdated = await submitDailyScoreOnly();
+      const totalRank = await queryPlayerRank(LEADERBOARD_TABLE, score);
+      const dailyRank = await queryPlayerRank(DAILY_LEADERBOARD_TABLE, score, beijingDateString());
+      const rankParts = [];
+      if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
+      if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
+      const rankText = rankParts.length ? `，当前${rankParts.join("，")}` : "";
+      messageEl.textContent = `${isGuestUser ? "游客最高分已提交成功" : "成绩提交成功"}${rankText}。`;
+      showFloatText(totalRank ? `提交成功！总榜第 ${totalRank} 名` : "提交成功！");
+      currentBoardMode = "total";
+      totalBoardTab.classList.add("active");
+      dailyBoardTab.classList.remove("active");
       await loadLeaderboard();
+      showScreen("leaderboard");
     }
 
     async function submitDailyScoreOnly() {
@@ -1931,8 +1953,8 @@
         .eq("user_id", currentUser.id)
         .eq("score_date", today)
         .maybeSingle();
-      if (existing && score <= existing.score) return;
-      await supabaseClient
+      if (existing && score <= existing.score) return false;
+      const { error } = await supabaseClient
         .from(DAILY_LEADERBOARD_TABLE)
         .upsert({
           user_id: currentUser.id,
@@ -1942,6 +1964,20 @@
           fragments: Math.floor(score / 300),
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id,score_date" });
+      return !error;
+    }
+
+    async function queryPlayerRank(tableName, targetScore, scoreDate = null) {
+      let betterCount = 0;
+      let query = supabaseClient
+        .from(tableName)
+        .select("*", { count: "exact", head: true })
+        .gt("score", targetScore);
+      if (scoreDate) query = query.eq("score_date", scoreDate);
+      const { count, error } = await query;
+      if (error) return null;
+      betterCount = count || 0;
+      return betterCount + 1;
     }
 
     function beijingDateString() {
