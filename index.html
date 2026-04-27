@@ -1580,11 +1580,11 @@
       if (continueBtn) continueBtn.textContent = gameOver ? "查看结算" : grid ? "继续洗护" : "开始洗护";
       brushBtn.textContent = brushMode ? "选择 3x3 区域" : "使用洗澡刷";
       if (submitScoreBtn) {
-        submitScoreBtn.disabled = scoreSubmittedThisRun;
+        submitScoreBtn.disabled = false;
         submitScoreBtn.textContent = scoreSubmittedThisRun ? "成绩已提交" : "提交成绩";
       }
       if (settlementSubmitBtn) {
-        settlementSubmitBtn.disabled = scoreSubmittedThisRun;
+        settlementSubmitBtn.disabled = false;
         settlementSubmitBtn.textContent = scoreSubmittedThisRun ? "成绩已提交" : "提交成绩";
       }
       gameOverEl.classList.toggle("show", gameOver);
