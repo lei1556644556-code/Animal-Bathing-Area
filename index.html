@@ -796,6 +796,108 @@
       filter: grayscale(.6);
     }
 
+    .screen {
+      display: none;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .mobile-shell {
+      width: min(430px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 12px;
+      display: none;
+    }
+
+    .mobile-shell.active {
+      display: block;
+    }
+
+    .mobile-screen {
+      min-height: calc(100vh - 24px);
+      padding: 14px;
+    }
+
+    .home-actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .home-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .game-screen {
+      min-height: calc(100vh - 24px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .game-screen .game {
+      box-shadow: none;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .game-screen .board-wrap {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .game-screen .board {
+      width: min(100%, 42vh);
+      max-height: 58vh;
+    }
+
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .screen-title {
+      margin: 0;
+      font-size: 26px;
+    }
+
+    .bottom-nav {
+      position: sticky;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding-top: 10px;
+      background: linear-gradient(180deg, transparent, rgba(243, 217, 182, .95) 28%);
+    }
+
+    .bottom-nav button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 4px;
+      background: #f8ead5;
+      color: #6b4b35;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .bottom-nav button.active {
+      background: #87c8d2;
+    }
+
     @media (max-width: 920px) {
       body {
         align-items: flex-start;
@@ -895,7 +997,120 @@
     <div class="auth-note" id="authMessage">请先登录账号，登录后才能进入游戏并上传排行榜成绩。</div>
   </section>
 
-  <main class="app locked" id="gameApp">
+  <main class="mobile-shell locked" id="gameApp">
+    <section class="screen mobile-screen panel active" id="homeScreen">
+      <div class="top-nav">
+        <h1 class="screen-title">动物沐场</h1>
+        <button class="small-button" id="logoutBtn" type="button">退出</button>
+      </div>
+      <div class="user-row">
+        <span id="playerName">未登录</span>
+        <span>碎片 <strong id="homeFragments">0</strong></span>
+      </div>
+      <div class="home-stats">
+        <div class="stat">
+          <div class="label">本局洗浴值</div>
+          <div class="value" id="score">0</div>
+        </div>
+        <div class="stat">
+          <div class="label">历史最高</div>
+          <div class="value" id="best">0</div>
+        </div>
+      </div>
+      <div class="upgrade-box" id="upgradeBox">
+        <div class="upgrade-title">游客账号绑定</div>
+        <input id="bindEmailInput" type="email" placeholder="输入邮箱">
+        <button class="small-button" id="bindEmailBtn" type="button">发送验证邮件</button>
+        <input id="bindPasswordInput" type="password" minlength="6" placeholder="验证邮箱后设置密码">
+        <button class="small-button" id="setPasswordBtn" type="button">设置密码</button>
+        <div class="hint" id="upgradeMessage">绑定邮箱后，排行榜最高分会保留在这个账号上。</div>
+      </div>
+      <div class="home-actions">
+        <button class="action" id="continueBtn" type="button">开始洗护</button>
+        <button class="action secondary" id="newRunBtn" type="button">新开一局</button>
+      </div>
+      <div class="message" id="message">点击开始进入浴场。</div>
+      <div class="bottom-nav">
+        <button class="active" data-screen="home">主页</button>
+        <button data-screen="leaderboard">排行</button>
+        <button data-screen="collection">图鉴</button>
+        <button data-screen="collection">装扮</button>
+      </div>
+    </section>
+
+    <section class="screen game-screen" id="playScreen">
+      <div class="top-nav panel side">
+        <button class="small-button" id="backHomeBtn" type="button">主页</button>
+        <div class="energy"><span class="bolt">⚡</span><span id="energyValue">已用 0</span></div>
+        <div class="energy">刷 <span id="brushCount">3</span></div>
+        <div class="currency" id="currency">0</div>
+      </div>
+      <section class="game">
+        <div class="board-wrap">
+          <div class="drop-line"></div>
+          <div class="board" id="board"></div>
+          <div class="falling-layer" id="fallingLayer"></div>
+          <div class="game-over" id="gameOver">浴场满员</div>
+        </div>
+        <div class="preview-row">
+          <div class="preview">
+            <span>当前方块</span>
+            <div id="currentPreview"></div>
+          </div>
+          <div class="preview">
+            <span>下一方块</span>
+            <div id="nextPreview"></div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="action secondary" id="brushBtn">使用洗澡刷</button>
+          <button class="action secondary" id="submitScoreBtn">提交成绩</button>
+          <button class="action danger" id="restartBtn">重新开始</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="screen mobile-screen panel" id="leaderboardScreen">
+      <div class="top-nav">
+        <h2 class="screen-title">排行榜</h2>
+        <button class="small-button" data-screen="home" type="button">返回</button>
+      </div>
+      <div class="tab-row">
+        <button id="totalBoardTab" class="active" type="button">总榜</button>
+        <button id="dailyBoardTab" type="button">今日榜</button>
+      </div>
+      <div id="leaderboardList">登录后加载排行榜。</div>
+      <div class="bottom-nav">
+        <button data-screen="home">主页</button>
+        <button class="active" data-screen="leaderboard">排行</button>
+        <button data-screen="collection">图鉴</button>
+        <button data-screen="collection">装扮</button>
+      </div>
+    </section>
+
+    <section class="screen mobile-screen panel" id="collectionScreen">
+      <div class="top-nav">
+        <h2 class="screen-title">图鉴装扮</h2>
+        <button class="small-button" data-screen="home" type="button">返回</button>
+      </div>
+      <div class="item-card">
+        <div>应援荧光棒碎片</div>
+        <strong id="rewardCount">x0</strong>
+      </div>
+      <h3>浴场主题</h3>
+      <div class="theme-grid" id="themeList"></div>
+      <h3>动物图鉴</h3>
+      <div class="codex-grid" id="codexList"></div>
+      <button class="action secondary" id="codexBtn" type="button">刷新图鉴</button>
+      <div class="bottom-nav">
+        <button data-screen="home">主页</button>
+        <button data-screen="leaderboard">排行</button>
+        <button class="active" data-screen="collection">图鉴</button>
+        <button class="active" data-screen="collection">装扮</button>
+      </div>
+    </section>
+
+<!-- legacy layout removed
     <section class="panel side">
       <h1>动物沐场 <button class="help" id="helpBtn" title="帮助">?</button></h1>
       <div class="stat">
@@ -974,6 +1189,7 @@
       </div>
       <button class="action secondary" id="codexBtn" type="button">动物图鉴</button>
     </aside>
+-->
   </main>
 
   <div class="modal" id="helpModal">
@@ -1001,7 +1217,7 @@
   <div class="modal" id="codexModal">
     <div class="dialog">
       <h2>动物图鉴</h2>
-      <div class="codex-grid" id="codexList"></div>
+      <div class="codex-grid" id="codexListModal"></div>
       <button class="action" id="closeCodexBtn" type="button">关闭</button>
     </div>
   </div>
@@ -1041,6 +1257,7 @@
     const LEADERBOARD_TABLE = "leaderboard_scores";
     const DAILY_LEADERBOARD_TABLE = "daily_leaderboard_scores";
     const PROFILE_TABLE = "player_profiles";
+    const SAVE_TABLE = "game_saves";
 
     const authScreenEl = document.getElementById("authScreen");
     const gameAppEl = document.getElementById("gameApp");
@@ -1076,6 +1293,14 @@
     const playerNameEl = document.getElementById("playerName");
     const logoutBtn = document.getElementById("logoutBtn");
     const leaderboardListEl = document.getElementById("leaderboardList");
+    const homeFragmentsEl = document.getElementById("homeFragments");
+    const continueBtn = document.getElementById("continueBtn");
+    const newRunBtn = document.getElementById("newRunBtn");
+    const backHomeBtn = document.getElementById("backHomeBtn");
+    const homeScreen = document.getElementById("homeScreen");
+    const playScreen = document.getElementById("playScreen");
+    const leaderboardScreen = document.getElementById("leaderboardScreen");
+    const collectionScreen = document.getElementById("collectionScreen");
     const totalBoardTab = document.getElementById("totalBoardTab");
     const dailyBoardTab = document.getElementById("dailyBoardTab");
     const themeListEl = document.getElementById("themeList");
@@ -1100,6 +1325,8 @@
     let isGuestUser;
     let playerProfile;
     let currentBoardMode;
+    let activeScreen;
+    let saveLoaded;
     let grid;
     let score;
     let energyUsed;
@@ -1165,9 +1392,11 @@
       mergeMarks = new Set();
       bornMark = null;
       pendingBucketAwards = 0;
+      saveLoaded = true;
       settlementModal.classList.remove("show");
       messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
       render();
+      saveGameState();
     }
 
     function render() {
@@ -1215,7 +1444,9 @@
         : `已用 ${energyUsed} 难度最大`;
       const fragments = playerProfile?.fragments || 0;
       currencyEl.textContent = fragments;
+      if (homeFragmentsEl) homeFragmentsEl.textContent = fragments;
       rewardCountEl.textContent = `x${fragments}`;
+      if (continueBtn) continueBtn.textContent = gameOver ? "查看结算" : grid ? "继续洗护" : "开始洗护";
       brushBtn.textContent = brushMode ? "选择 3x3 区域" : "使用洗澡刷";
       gameOverEl.classList.toggle("show", gameOver);
       renderThemes();
@@ -1302,7 +1533,7 @@
       });
     }
 
-    function enterGame(user) {
+    async function enterGame(user) {
       currentUser = user;
       isGuestUser = Boolean(user.is_anonymous);
       currentBoardMode = currentBoardMode || "total";
@@ -1311,9 +1542,10 @@
       authScreenEl.style.display = "none";
       gameAppEl.classList.remove("locked");
       renderAccountUpgrade();
-      if (!grid) init();
-      loadPlayerProfile();
-      loadLeaderboard();
+      await loadPlayerProfile();
+      await loadGameState();
+      await loadLeaderboard();
+      showScreen("home");
     }
 
     function leaveGame() {
@@ -1322,6 +1554,9 @@
       isGuestUser = false;
       playerProfile = null;
       currentBoardMode = "total";
+      activeScreen = "home";
+      saveLoaded = false;
+      grid = null;
       authScreenEl.style.display = "block";
       gameAppEl.classList.add("locked");
       upgradeBoxEl.classList.remove("show");
@@ -1401,6 +1636,127 @@
     function applyTheme(themeId) {
       document.body.classList.toggle("theme-bubble", themeId === "bubble");
       document.body.classList.toggle("theme-onsen", themeId === "onsen");
+    }
+
+    function showScreen(screen) {
+      activeScreen = screen;
+      homeScreen.classList.toggle("active", screen === "home");
+      playScreen.classList.toggle("active", screen === "play");
+      leaderboardScreen.classList.toggle("active", screen === "leaderboard");
+      collectionScreen.classList.toggle("active", screen === "collection");
+      document.querySelectorAll("[data-screen]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.screen === screen);
+      });
+      if (screen === "leaderboard") loadLeaderboard();
+      if (screen === "collection") {
+        renderThemes();
+        renderCodex();
+      }
+      render();
+    }
+
+    function buildSaveData() {
+      return {
+        grid,
+        score,
+        energyUsed,
+        bestScore,
+        maxChain,
+        maxAnimalLevel,
+        bathCount,
+        lastAwardedFragments,
+        fragmentsAwardedThisRun,
+        brushCount,
+        currentPiece,
+        nextPiece,
+        brushMode,
+        gameOver,
+        pendingBucketAwards,
+        updated_at: new Date().toISOString()
+      };
+    }
+
+    function restoreSaveData(save) {
+      grid = save.grid || createEmptyGrid();
+      score = save.score || 0;
+      energyUsed = save.energyUsed || 0;
+      bestScore = Math.max(Number(localStorage.getItem("animalBathBest") || 0), save.bestScore || 0);
+      maxChain = save.maxChain || 0;
+      maxAnimalLevel = save.maxAnimalLevel || 0;
+      bathCount = save.bathCount || 0;
+      lastAwardedFragments = save.lastAwardedFragments || 0;
+      fragmentsAwardedThisRun = Boolean(save.fragmentsAwardedThisRun);
+      brushCount = save.brushCount ?? 3;
+      currentPiece = save.currentPiece || randomPiece();
+      nextPiece = save.nextPiece || randomPiece();
+      brushMode = Boolean(save.brushMode);
+      gameOver = Boolean(save.gameOver);
+      pendingBucketAwards = save.pendingBucketAwards || 0;
+      isAnimating = false;
+      activeDrop = null;
+      mergeMarks = new Set();
+      bornMark = null;
+      saveLoaded = true;
+      render();
+      if (gameOver) showSettlement();
+    }
+
+    async function loadGameState() {
+      if (!supabaseClient || !currentUser) {
+        if (!grid) init();
+        return;
+      }
+      const localKey = `animalBathSave:${currentUser.id}`;
+      const { data, error } = await supabaseClient
+        .from(SAVE_TABLE)
+        .select("save_data")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+      if (!error && data?.save_data) {
+        restoreSaveData(data.save_data);
+        return;
+      }
+      const localSave = localStorage.getItem(localKey);
+      if (localSave) {
+        try {
+          restoreSaveData(JSON.parse(localSave));
+          saveGameState();
+          return;
+        } catch (_err) {
+          localStorage.removeItem(localKey);
+        }
+      }
+      if (!grid) init();
+    }
+
+    async function saveGameState() {
+      if (!currentUser || !grid || !saveLoaded) return;
+      const saveData = buildSaveData();
+      localStorage.setItem(`animalBathSave:${currentUser.id}`, JSON.stringify(saveData));
+      if (!supabaseClient) return;
+      await supabaseClient
+        .from(SAVE_TABLE)
+        .upsert({
+          user_id: currentUser.id,
+          save_data: saveData,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "user_id" });
+    }
+
+    async function clearGameSave() {
+      if (!currentUser) return;
+      localStorage.removeItem(`animalBathSave:${currentUser.id}`);
+      if (supabaseClient) {
+        await supabaseClient.from(SAVE_TABLE).delete().eq("user_id", currentUser.id);
+      }
+    }
+
+    async function startNewRun() {
+      await clearGameSave();
+      grid = null;
+      saveLoaded = false;
+      init();
+      showScreen("play");
     }
 
     async function handleLogin(event) {
@@ -1685,10 +2041,12 @@
       applyTheme(themeId);
       renderThemes();
       await savePlayerProfile();
+      render();
     }
 
     async function awardRunFragments() {
-      if (!playerProfile || fragmentsAwardedThisRun) return Math.floor(score / 300);
+      if (!playerProfile) return Math.floor(score / 300);
+      if (fragmentsAwardedThisRun) return lastAwardedFragments || 0;
       const earned = Math.floor(score / 300);
       lastAwardedFragments = earned;
       fragmentsAwardedThisRun = true;
@@ -1698,6 +2056,7 @@
         showFloatText(`获得 ${earned} 个碎片！`);
       }
       render();
+      saveGameState();
       return earned;
     }
 
@@ -1712,6 +2071,7 @@
         <div class="settle-card">获得碎片<strong>${earnedFragments}</strong></div>
       `;
       settlementModal.classList.add("show");
+      saveGameState();
     }
 
     async function handleCellClick(row, col) {
@@ -1758,6 +2118,7 @@
       checkGameOver();
       isAnimating = false;
       render();
+      saveGameState();
     }
 
     function getEffectiveLevel(row, col) {
@@ -1944,6 +2305,7 @@
       checkGameOver();
       isAnimating = false;
       render();
+      saveGameState();
     }
 
     function brushCells(centerRow, centerCol) {
@@ -2018,7 +2380,20 @@
     guestBtn.addEventListener("click", handleGuestLogin);
     submitScoreBtn.addEventListener("click", submitScore);
     settlementSubmitBtn.addEventListener("click", submitScore);
-    settlementRestartBtn.addEventListener("click", init);
+    settlementRestartBtn.addEventListener("click", startNewRun);
+    continueBtn.addEventListener("click", () => {
+      if (!grid) init();
+      if (gameOver) showSettlement();
+      showScreen("play");
+    });
+    newRunBtn.addEventListener("click", startNewRun);
+    backHomeBtn.addEventListener("click", () => {
+      saveGameState();
+      showScreen("home");
+    });
+    document.querySelectorAll("[data-screen]").forEach((button) => {
+      button.addEventListener("click", () => showScreen(button.dataset.screen));
+    });
     totalBoardTab.addEventListener("click", () => {
       currentBoardMode = "total";
       totalBoardTab.classList.add("active");
@@ -2033,7 +2408,6 @@
     });
     codexBtn.addEventListener("click", () => {
       renderCodex();
-      codexModal.classList.add("show");
     });
     closeCodexBtn.addEventListener("click", () => codexModal.classList.remove("show"));
     codexModal.addEventListener("click", (event) => {
@@ -2048,13 +2422,15 @@
     });
     restartBtn.addEventListener("click", () => {
       if (isAnimating) return;
-      init();
+      startNewRun();
     });
-    helpBtn.addEventListener("click", () => helpModal.classList.add("show"));
-    closeHelp.addEventListener("click", () => helpModal.classList.remove("show"));
-    helpModal.addEventListener("click", (event) => {
-      if (event.target === helpModal) helpModal.classList.remove("show");
-    });
+    if (helpBtn) helpBtn.addEventListener("click", () => helpModal.classList.add("show"));
+    if (closeHelp) closeHelp.addEventListener("click", () => helpModal.classList.remove("show"));
+    if (helpModal) {
+      helpModal.addEventListener("click", (event) => {
+        if (event.target === helpModal) helpModal.classList.remove("show");
+      });
+    }
 
     bootstrapAuth();
   </script>
