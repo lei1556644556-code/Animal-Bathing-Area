@@ -568,6 +568,13 @@
       padding: 20px;
     }
 
+    .boot-screen {
+      width: min(430px, calc(100% - 28px));
+      margin: auto;
+      padding: 24px;
+      text-align: center;
+    }
+
     .auth-tabs {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -971,7 +978,12 @@
   </style>
 </head>
 <body>
-  <section class="panel auth-screen" id="authScreen">
+  <section class="panel boot-screen" id="bootScreen">
+    <h1>动物沐场</h1>
+    <div class="auth-note">正在加载浴场...</div>
+  </section>
+
+  <section class="panel auth-screen" id="authScreen" style="display:none">
     <h1>动物沐场</h1>
     <div class="auth-tabs">
       <button class="auth-tab active" id="loginTab" type="button">登录</button>
@@ -1189,6 +1201,7 @@
     const PROFILE_TABLE = "player_profiles";
     const SAVE_TABLE = "game_saves";
 
+    const bootScreenEl = document.getElementById("bootScreen");
     const authScreenEl = document.getElementById("authScreen");
     const gameAppEl = document.getElementById("gameApp");
     const loginTab = document.getElementById("loginTab");
@@ -1447,6 +1460,8 @@
 
     async function bootstrapAuth() {
       if (!isSupabaseConfigured()) {
+        bootScreenEl.style.display = "none";
+        authScreenEl.style.display = "block";
         authMessageEl.textContent = "还没有配置 Supabase。请把 HTML 顶部脚本里的 SUPABASE_URL 和 SUPABASE_ANON_KEY 填好后再发布。";
         return;
       }
@@ -1485,9 +1500,11 @@
         await loadGameState();
         await loadLeaderboard();
         showScreen("home");
+        bootScreenEl.style.display = "none";
         authScreenEl.style.display = "none";
       } catch (error) {
         console.error(error);
+        bootScreenEl.style.display = "none";
         authScreenEl.style.display = "block";
         gameAppEl.classList.add("locked");
         authMessageEl.textContent = `加载失败：${error.message || error}`;
@@ -1507,6 +1524,7 @@
       enteringUserId = null;
       grid = null;
       gameAppEl.style.display = "none";
+      bootScreenEl.style.display = "none";
       authScreenEl.style.display = "block";
       gameAppEl.classList.add("locked");
       upgradeBoxEl.classList.remove("show");
