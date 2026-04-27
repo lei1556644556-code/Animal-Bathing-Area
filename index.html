@@ -577,6 +577,13 @@
       margin: 8px 0;
     }
 
+    .dialog-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
     .game-over {
       position: absolute;
       inset: 10px;
@@ -1212,6 +1219,17 @@
     </div>
   </div>
 
+  <div class="modal" id="submitResultModal">
+    <div class="dialog">
+      <h2>提交成功</h2>
+      <p id="submitResultText">成绩已提交。</p>
+      <div class="dialog-actions">
+        <button class="action secondary" id="submitResultCloseBtn" type="button">关闭</button>
+        <button class="action" id="submitResultBoardBtn" type="button">查看排行榜</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="codexModal">
     <div class="dialog">
       <h2>动物图鉴</h2>
@@ -1312,6 +1330,10 @@
     const settlementStatsEl = document.getElementById("settlementStats");
     const settlementSubmitBtn = document.getElementById("settlementSubmitBtn");
     const settlementRestartBtn = document.getElementById("settlementRestartBtn");
+    const submitResultModal = document.getElementById("submitResultModal");
+    const submitResultText = document.getElementById("submitResultText");
+    const submitResultCloseBtn = document.getElementById("submitResultCloseBtn");
+    const submitResultBoardBtn = document.getElementById("submitResultBoardBtn");
     const upgradeBoxEl = document.getElementById("upgradeBox");
     const bindEmailInput = document.getElementById("bindEmailInput");
     const bindEmailBtn = document.getElementById("bindEmailBtn");
@@ -1887,6 +1909,7 @@
         return;
       }
       submitScoreBtn.disabled = true;
+      settlementSubmitBtn.disabled = true;
       messageEl.textContent = "正在提交排行榜成绩...";
       const { data: existing, error: readError } = await supabaseClient
         .from(LEADERBOARD_TABLE)
@@ -1895,24 +1918,23 @@
         .maybeSingle();
       if (readError) {
         submitScoreBtn.disabled = false;
+        settlementSubmitBtn.disabled = false;
         messageEl.textContent = `读取历史最高分失败：${readError.message}`;
         return;
       }
       if (existing && score <= existing.score) {
         submitScoreBtn.disabled = false;
+        settlementSubmitBtn.disabled = false;
         const dailyUpdated = await submitDailyScoreOnly();
         const totalRank = await queryPlayerRank(LEADERBOARD_TABLE, existing.score);
         const dailyRank = await queryPlayerRank(DAILY_LEADERBOARD_TABLE, Math.max(score, existing.score), beijingDateString());
         const rankParts = [];
         if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
         if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
-        messageEl.textContent = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
+        const resultMessage = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
+        messageEl.textContent = resultMessage;
         showFloatText(totalRank ? `未刷新总榜，当前第 ${totalRank} 名` : "本局未刷新最高分");
-        currentBoardMode = "total";
-        totalBoardTab.classList.add("active");
-        dailyBoardTab.classList.remove("active");
-        await loadLeaderboard();
-        showScreen("leaderboard");
+        showSubmitResult(resultMessage);
         return;
       }
       const { error } = await supabaseClient
@@ -1925,6 +1947,7 @@
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
       submitScoreBtn.disabled = false;
+      settlementSubmitBtn.disabled = false;
       if (error) {
         messageEl.textContent = `提交失败：${error.message}`;
         return;
@@ -1936,13 +1959,10 @@
       if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
       if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
       const rankText = rankParts.length ? `，当前${rankParts.join("，")}` : "";
-      messageEl.textContent = `${isGuestUser ? "游客最高分已提交成功" : "成绩提交成功"}${rankText}。`;
+      const resultMessage = `${isGuestUser ? "游客最高分已提交成功" : "成绩提交成功"}${rankText}。`;
+      messageEl.textContent = resultMessage;
       showFloatText(totalRank ? `提交成功！总榜第 ${totalRank} 名` : "提交成功！");
-      currentBoardMode = "total";
-      totalBoardTab.classList.add("active");
-      dailyBoardTab.classList.remove("active");
-      await loadLeaderboard();
-      showScreen("leaderboard");
+      showSubmitResult(resultMessage);
     }
 
     async function submitDailyScoreOnly() {
@@ -2037,6 +2057,12 @@
       el.textContent = text;
       document.body.appendChild(el);
       setTimeout(() => el.remove(), 980);
+    }
+
+    function showSubmitResult(message) {
+      settlementModal.classList.remove("show");
+      submitResultText.textContent = message;
+      submitResultModal.classList.add("show");
     }
 
     async function unlockAnimal(level) {
@@ -2447,6 +2473,15 @@
     submitScoreBtn.addEventListener("click", submitScore);
     settlementSubmitBtn.addEventListener("click", submitScore);
     settlementRestartBtn.addEventListener("click", startNewRun);
+    submitResultCloseBtn.addEventListener("click", () => submitResultModal.classList.remove("show"));
+    submitResultBoardBtn.addEventListener("click", async () => {
+      submitResultModal.classList.remove("show");
+      currentBoardMode = "total";
+      totalBoardTab.classList.add("active");
+      dailyBoardTab.classList.remove("active");
+      await loadLeaderboard();
+      showScreen("leaderboard");
+    });
     continueBtn.addEventListener("click", () => {
       if (!grid) init();
       if (gameOver) showSettlement();
@@ -2478,6 +2513,9 @@
     closeCodexBtn.addEventListener("click", () => codexModal.classList.remove("show"));
     codexModal.addEventListener("click", (event) => {
       if (event.target === codexModal) codexModal.classList.remove("show");
+    });
+    submitResultModal.addEventListener("click", (event) => {
+      if (event.target === submitResultModal) submitResultModal.classList.remove("show");
     });
     bindEmailBtn.addEventListener("click", handleBindEmail);
     setPasswordBtn.addEventListener("click", handleSetPassword);
