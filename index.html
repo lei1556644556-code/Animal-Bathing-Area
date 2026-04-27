@@ -1545,6 +1545,11 @@
       currentPreviewEl.appendChild(renderPiece(currentPiece, true));
       nextPreviewEl.innerHTML = "";
       nextPreviewEl.appendChild(renderPiece(nextPiece, true));
+      renderStatusUi();
+      renderThemes();
+    }
+
+    function renderStatusUi() {
       scoreEl.textContent = score;
       bestEl.textContent = bestScore;
       if (playScoreValueEl) playScoreValueEl.textContent = score;
@@ -1583,7 +1588,6 @@
         settlementSubmitBtn.textContent = scoreSubmittedThisRun ? "成绩已提交" : "提交成绩";
       }
       gameOverEl.classList.toggle("show", gameOver);
-      renderThemes();
     }
 
     function renderPiece(piece, mini = false) {
@@ -1606,6 +1610,7 @@
     function renderFallingPiece() {
       fallingLayerEl.innerHTML = "";
       if (!activeDrop) {
+        if (isAnimating) return;
         const preview = document.createElement("div");
         preview.className = "falling-piece";
         preview.style.setProperty("--col", "2");
@@ -2174,7 +2179,7 @@
     async function refreshLiveRaceInfo() {
       if (!supabaseClient || !currentUser) {
         liveRaceInfo = null;
-        render();
+        renderStatusUi();
         return;
       }
       const { data: higherRows, error } = await supabaseClient
@@ -2185,7 +2190,7 @@
         .limit(1);
       if (error) {
         liveRaceInfo = null;
-        render();
+        renderStatusUi();
         return;
       }
       if (higherRows?.length) {
@@ -2197,7 +2202,7 @@
           .limit(1);
         liveRaceInfo = anyRows?.length ? { status: "top", score } : { status: "unranked", score: 0 };
       }
-      render();
+      renderStatusUi();
     }
 
     function escapeHtml(value) {
