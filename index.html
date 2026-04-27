@@ -933,6 +933,40 @@
       gap: 8px;
     }
 
+    .game-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 8px 0 10px;
+    }
+
+    .game-meta-card {
+      min-width: 0;
+      padding: 8px 10px;
+      border: 2px solid rgba(211, 167, 99, .75);
+      border-radius: 8px;
+      background: rgba(255, 248, 237, .88);
+      color: #7b5c40;
+    }
+
+    .game-meta-card .label {
+      font-size: 12px;
+      font-weight: 900;
+      opacity: .82;
+      white-space: nowrap;
+    }
+
+    .game-meta-card .value {
+      margin-top: 3px;
+      font-size: 22px;
+      font-weight: 950;
+      line-height: 1.05;
+      color: #5b4032;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .screen-title {
       margin: 0;
       font-size: 26px;
@@ -1037,6 +1071,22 @@
       .controls {
         grid-template-columns: 1fr;
       }
+
+      .game-meta {
+        gap: 6px;
+      }
+
+      .game-meta-card {
+        padding: 7px 8px;
+      }
+
+      .game-meta-card .label {
+        font-size: 11px;
+      }
+
+      .game-meta-card .value {
+        font-size: 18px;
+      }
     }
   </style>
 </head>
@@ -1129,6 +1179,20 @@
         <div class="energy"><span class="bolt">⚡</span><span id="energyValue">已用 0</span></div>
         <div class="energy">刷 <span id="brushCount">3</span></div>
         <div class="currency" id="currency">0</div>
+      </div>
+      <div class="game-meta">
+        <div class="game-meta-card">
+          <div class="label">总得分</div>
+          <div class="value" id="playScoreValue">0</div>
+        </div>
+        <div class="game-meta-card">
+          <div class="label">最高动物</div>
+          <div class="value" id="playBestAnimalValue">暂无</div>
+        </div>
+        <div class="game-meta-card">
+          <div class="label">距前一名</div>
+          <div class="value" id="playGapValue">--</div>
+        </div>
       </div>
       <section class="game">
         <div class="board-wrap">
@@ -1230,6 +1294,17 @@
     </div>
   </div>
 
+  <div class="modal" id="gameOverPromptModal">
+    <div class="dialog">
+      <h2>游戏已结束</h2>
+      <p>本局已经结束了，是否开始新一局？</p>
+      <div class="dialog-actions">
+        <button class="action secondary" id="gameOverPromptCloseBtn" type="button">关闭</button>
+        <button class="action" id="gameOverPromptRestartBtn" type="button">开始新一局</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="codexModal">
     <div class="dialog">
       <h2>动物图鉴</h2>
@@ -1298,6 +1373,9 @@
     const rewardCountEl = document.getElementById("rewardCount");
     const energyValueEl = document.getElementById("energyValue");
     const messageEl = document.getElementById("message");
+    const playScoreValueEl = document.getElementById("playScoreValue");
+    const playBestAnimalValueEl = document.getElementById("playBestAnimalValue");
+    const playGapValueEl = document.getElementById("playGapValue");
     const currentPreviewEl = document.getElementById("currentPreview");
     const nextPreviewEl = document.getElementById("nextPreview");
     const fallingLayerEl = document.getElementById("fallingLayer");
@@ -1334,6 +1412,9 @@
     const submitResultText = document.getElementById("submitResultText");
     const submitResultCloseBtn = document.getElementById("submitResultCloseBtn");
     const submitResultBoardBtn = document.getElementById("submitResultBoardBtn");
+    const gameOverPromptModal = document.getElementById("gameOverPromptModal");
+    const gameOverPromptCloseBtn = document.getElementById("gameOverPromptCloseBtn");
+    const gameOverPromptRestartBtn = document.getElementById("gameOverPromptRestartBtn");
     const upgradeBoxEl = document.getElementById("upgradeBox");
     const bindEmailInput = document.getElementById("bindEmailInput");
     const bindEmailBtn = document.getElementById("bindEmailBtn");
@@ -1369,6 +1450,7 @@
     let mergeMarks;
     let bornMark;
     let pendingBucketAwards;
+    let liveRaceInfo;
 
     function createEmptyGrid() {
       return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
@@ -1415,10 +1497,12 @@
       mergeMarks = new Set();
       bornMark = null;
       pendingBucketAwards = 0;
+      liveRaceInfo = null;
       saveLoaded = true;
       settlementModal.classList.remove("show");
       messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
       render();
+      refreshLiveRaceInfo();
       saveGameState();
     }
 
@@ -1461,6 +1545,23 @@
       nextPreviewEl.appendChild(renderPiece(nextPiece, true));
       scoreEl.textContent = score;
       bestEl.textContent = bestScore;
+      if (playScoreValueEl) playScoreValueEl.textContent = score;
+      if (playBestAnimalValueEl) {
+        playBestAnimalValueEl.textContent = maxAnimalLevel
+          ? `Lv.${maxAnimalLevel}`
+          : "暂无";
+      }
+      if (playGapValueEl) {
+        if (!liveRaceInfo) {
+          playGapValueEl.textContent = "--";
+        } else if (liveRaceInfo.status === "top") {
+          playGapValueEl.textContent = "第1名";
+        } else if (liveRaceInfo.status === "unranked") {
+          playGapValueEl.textContent = "未上榜";
+        } else {
+          playGapValueEl.textContent = `${Math.max(0, liveRaceInfo.score - score + 1)}`;
+        }
+      }
       brushCountEl.textContent = brushCount;
       energyValueEl.textContent = energyUsed < ENERGY_CAP
         ? `已用 ${energyUsed}`
@@ -1699,6 +1800,9 @@
         renderThemes();
         renderCodex();
       }
+      if (screen === "play" || screen === "home") {
+        refreshLiveRaceInfo();
+      }
       render();
     }
 
@@ -1761,12 +1865,14 @@
         .maybeSingle();
       if (!error && data?.save_data) {
         restoreSaveData(data.save_data);
+        refreshLiveRaceInfo();
         return;
       }
       const localSave = localStorage.getItem(localKey);
       if (localSave) {
         try {
           restoreSaveData(JSON.parse(localSave));
+          refreshLiveRaceInfo();
           saveGameState();
           return;
         } catch (_err) {
@@ -2041,6 +2147,35 @@
       `).join("");
     }
 
+    async function refreshLiveRaceInfo() {
+      if (!supabaseClient || !currentUser) {
+        liveRaceInfo = null;
+        render();
+        return;
+      }
+      const { data: higherRows, error } = await supabaseClient
+        .from(LEADERBOARD_TABLE)
+        .select("score")
+        .gt("score", score)
+        .order("score", { ascending: true })
+        .limit(1);
+      if (error) {
+        liveRaceInfo = null;
+        render();
+        return;
+      }
+      if (higherRows?.length) {
+        liveRaceInfo = { status: "chasing", score: Number(higherRows[0].score) || 0 };
+      } else {
+        const { data: anyRows } = await supabaseClient
+          .from(LEADERBOARD_TABLE)
+          .select("score")
+          .limit(1);
+        liveRaceInfo = anyRows?.length ? { status: "top", score } : { status: "unranked", score: 0 };
+      }
+      render();
+    }
+
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, (char) => ({
         "&": "&amp;",
@@ -2063,6 +2198,10 @@
       settlementModal.classList.remove("show");
       submitResultText.textContent = message;
       submitResultModal.classList.add("show");
+    }
+
+    function showGameOverPrompt() {
+      gameOverPromptModal.classList.add("show");
     }
 
     async function unlockAnimal(level) {
@@ -2205,6 +2344,7 @@
       checkGameOver();
       isAnimating = false;
       render();
+      refreshLiveRaceInfo();
       saveGameState();
     }
 
@@ -2392,6 +2532,7 @@
       checkGameOver();
       isAnimating = false;
       render();
+      refreshLiveRaceInfo();
       saveGameState();
     }
 
@@ -2455,7 +2596,12 @@
     }
 
     brushBtn.addEventListener("click", () => {
-      if (gameOver || isAnimating) return;
+      if (gameOver) {
+        messageEl.textContent = "游戏已结束，开始新一局后才能继续使用洗澡刷。";
+        showGameOverPrompt();
+        return;
+      }
+      if (isAnimating) return;
       if (brushCount <= 0) {
         messageEl.textContent = "洗澡刷已经用完了。";
         return;
@@ -2516,6 +2662,14 @@
     });
     submitResultModal.addEventListener("click", (event) => {
       if (event.target === submitResultModal) submitResultModal.classList.remove("show");
+    });
+    gameOverPromptCloseBtn.addEventListener("click", () => gameOverPromptModal.classList.remove("show"));
+    gameOverPromptRestartBtn.addEventListener("click", () => {
+      gameOverPromptModal.classList.remove("show");
+      startNewRun();
+    });
+    gameOverPromptModal.addEventListener("click", (event) => {
+      if (event.target === gameOverPromptModal) gameOverPromptModal.classList.remove("show");
     });
     bindEmailBtn.addEventListener("click", handleBindEmail);
     setPasswordBtn.addEventListener("click", handleSetPassword);
