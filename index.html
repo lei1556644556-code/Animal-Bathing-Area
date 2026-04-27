@@ -344,9 +344,9 @@
     .tile-piece .animal {
       position: relative;
       z-index: 2;
-      font-size: clamp(24px, 5.8vw, 42px);
+      font-size: clamp(34px, 8.8vw, 58px);
       line-height: 1;
-      transform: translateY(-2px);
+      transform: translateY(-1px) scale(1.08);
     }
 
     .tile-1 { background: #f2c14e; }
@@ -415,6 +415,19 @@
       width: 58px;
       max-width: 58px;
       height: 58px;
+    }
+
+    .mini .animal {
+      font-size: 32px;
+      transform: translateY(-1px) scale(1);
+    }
+
+    .mini .num {
+      min-width: 20px;
+      height: 20px;
+      font-size: 11px;
+      right: 3px;
+      bottom: 3px;
     }
 
     button.action {
@@ -959,7 +972,7 @@
       }
 
       .tile-piece .animal {
-        font-size: clamp(22px, 8vw, 34px);
+        font-size: clamp(30px, 10.5vw, 48px);
       }
 
       .tile-piece .num {
