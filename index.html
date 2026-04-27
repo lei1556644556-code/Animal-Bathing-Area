@@ -1451,6 +1451,7 @@
     let bornMark;
     let pendingBucketAwards;
     let liveRaceInfo;
+    let scoreSubmittedThisRun;
 
     function createEmptyGrid() {
       return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
@@ -1498,6 +1499,7 @@
       bornMark = null;
       pendingBucketAwards = 0;
       liveRaceInfo = null;
+      scoreSubmittedThisRun = false;
       saveLoaded = true;
       settlementModal.classList.remove("show");
       messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
@@ -1572,6 +1574,14 @@
       rewardCountEl.textContent = `x${fragments}`;
       if (continueBtn) continueBtn.textContent = gameOver ? "查看结算" : grid ? "继续洗护" : "开始洗护";
       brushBtn.textContent = brushMode ? "选择 3x3 区域" : "使用洗澡刷";
+      if (submitScoreBtn) {
+        submitScoreBtn.disabled = scoreSubmittedThisRun;
+        submitScoreBtn.textContent = scoreSubmittedThisRun ? "成绩已提交" : "提交成绩";
+      }
+      if (settlementSubmitBtn) {
+        settlementSubmitBtn.disabled = scoreSubmittedThisRun;
+        settlementSubmitBtn.textContent = scoreSubmittedThisRun ? "成绩已提交" : "提交成绩";
+      }
       gameOverEl.classList.toggle("show", gameOver);
       renderThemes();
     }
@@ -1823,6 +1833,7 @@
         brushMode,
         gameOver,
         pendingBucketAwards,
+        scoreSubmittedThisRun,
         updated_at: new Date().toISOString()
       };
     }
@@ -1843,6 +1854,7 @@
       brushMode = Boolean(save.brushMode);
       gameOver = Boolean(save.gameOver);
       pendingBucketAwards = save.pendingBucketAwards || 0;
+      scoreSubmittedThisRun = Boolean(save.scoreSubmittedThisRun);
       isAnimating = false;
       activeDrop = null;
       mergeMarks = new Set();
@@ -2010,6 +2022,12 @@
         messageEl.textContent = "请先登录后再提交成绩。";
         return;
       }
+      if (scoreSubmittedThisRun) {
+        messageEl.textContent = "本局成绩已经提交过了，是否直接开始下一局？";
+        showFloatText("本局成绩已提交");
+        showGameOverPrompt();
+        return;
+      }
       if (score <= 0) {
         messageEl.textContent = "本局还没有获得洗浴值，暂时不用提交。";
         return;
@@ -2038,8 +2056,11 @@
         if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
         if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
         const resultMessage = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
+        scoreSubmittedThisRun = true;
         messageEl.textContent = resultMessage;
         showFloatText(totalRank ? `未刷新总榜，当前第 ${totalRank} 名` : "本局未刷新最高分");
+        saveGameState();
+        render();
         showSubmitResult(resultMessage);
         return;
       }
@@ -2066,8 +2087,11 @@
       if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
       const rankText = rankParts.length ? `，当前${rankParts.join("，")}` : "";
       const resultMessage = `${isGuestUser ? "游客最高分已提交成功" : "成绩提交成功"}${rankText}。`;
+      scoreSubmittedThisRun = true;
       messageEl.textContent = resultMessage;
       showFloatText(totalRank ? `提交成功！总榜第 ${totalRank} 名` : "提交成功！");
+      saveGameState();
+      render();
       showSubmitResult(resultMessage);
     }
 
