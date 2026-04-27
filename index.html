@@ -1225,6 +1225,7 @@
     const ROWS = 7;
     const COLS = 5;
     const MAX_LEVEL = 11;
+    const LOSS_ROW_INDEX = 1;
     const BOARD_SIZE = ROWS * COLS;
     const ENERGY_CAP = 300;
     const START_WEIGHTS = [8, 1, 1, 0, 0];
@@ -2379,7 +2380,12 @@
     }
 
     function checkGameOver() {
-      gameOver = Array.from({ length: COLS }, (_, c) => getDropRow(c)).every(row => row < 0);
+      gameOver = Array.from({ length: COLS }, (_, c) => {
+        for (let r = 0; r <= LOSS_ROW_INDEX; r++) {
+          if (grid[r]?.[c]) return true;
+        }
+        return false;
+      }).some(Boolean);
       if (gameOver) {
         messageEl.textContent = "浴场满员啦，本次洗护完成。";
         showSettlement();
