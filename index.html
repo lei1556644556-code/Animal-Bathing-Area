@@ -816,6 +816,10 @@
       display: block;
     }
 
+    .mobile-shell:not(.locked) {
+      display: block;
+    }
+
     .mobile-screen {
       min-height: calc(100vh - 24px);
       padding: 14px;
@@ -1327,6 +1331,7 @@
     let currentBoardMode;
     let activeScreen;
     let saveLoaded;
+    let enteringUserId;
     let grid;
     let score;
     let energyUsed;
@@ -1520,9 +1525,12 @@
         return;
       }
       supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      authMessageEl.textContent = "正在检查登录状态...";
       const { data } = await supabaseClient.auth.getSession();
       if (data.session?.user) {
-        enterGame(data.session.user);
+        await enterGame(data.session.user);
+      } else {
+        leaveGame();
       }
       supabaseClient.auth.onAuthStateChange((_event, session) => {
         if (session?.user) {
@@ -1534,18 +1542,31 @@
     }
 
     async function enterGame(user) {
+      if (enteringUserId === user.id) return;
+      if (currentUser?.id === user.id && gameAppEl && !gameAppEl.classList.contains("locked")) return;
+      enteringUserId = user.id;
       currentUser = user;
       isGuestUser = Boolean(user.is_anonymous);
       currentBoardMode = currentBoardMode || "total";
       currentPlayerName = user.user_metadata?.player_name || user.email?.split("@")[0] || getGuestName();
       playerNameEl.textContent = currentPlayerName;
-      authScreenEl.style.display = "none";
-      gameAppEl.classList.remove("locked");
-      renderAccountUpgrade();
-      await loadPlayerProfile();
-      await loadGameState();
-      await loadLeaderboard();
-      showScreen("home");
+      authMessageEl.textContent = "正在加载浴场...";
+      try {
+        gameAppEl.classList.remove("locked");
+        renderAccountUpgrade();
+        await loadPlayerProfile();
+        await loadGameState();
+        await loadLeaderboard();
+        showScreen("home");
+        authScreenEl.style.display = "none";
+      } catch (error) {
+        console.error(error);
+        authScreenEl.style.display = "block";
+        gameAppEl.classList.add("locked");
+        authMessageEl.textContent = `加载失败：${error.message || error}`;
+      } finally {
+        enteringUserId = null;
+      }
     }
 
     function leaveGame() {
@@ -1556,6 +1577,7 @@
       currentBoardMode = "total";
       activeScreen = "home";
       saveLoaded = false;
+      enteringUserId = null;
       grid = null;
       authScreenEl.style.display = "block";
       gameAppEl.classList.add("locked");
