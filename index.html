@@ -1007,7 +1007,7 @@
     <div class="auth-note" id="authMessage">请先登录账号，登录后才能进入游戏并上传排行榜成绩。</div>
   </section>
 
-  <main class="mobile-shell locked" id="gameApp">
+  <main class="mobile-shell locked" id="gameApp" style="display:none">
     <section class="screen mobile-screen panel active" id="homeScreen">
       <div class="top-nav">
         <h1 class="screen-title">动物沐场</h1>
@@ -1120,86 +1120,6 @@
       </div>
     </section>
 
-<!-- legacy layout removed
-    <section class="panel side">
-      <h1>动物沐场 <button class="help" id="helpBtn" title="帮助">?</button></h1>
-      <div class="stat">
-        <div class="label">本局洗浴值</div>
-        <div class="value" id="score">0</div>
-      </div>
-      <div class="stat">
-        <div class="label">历史最高洗浴值</div>
-        <div class="value" id="best">0</div>
-      </div>
-      <div class="stat">
-        <div class="label">洗澡刷</div>
-        <div class="value" id="brushCount">3</div>
-      </div>
-      <div class="user-row">
-        <span id="playerName">未登录</span>
-        <button class="small-button" id="logoutBtn" type="button">退出</button>
-      </div>
-      <div class="upgrade-box" id="upgradeBox">
-        <div class="upgrade-title">游客账号绑定</div>
-        <input id="bindEmailInput" type="email" placeholder="输入邮箱">
-        <button class="small-button" id="bindEmailBtn" type="button">发送验证邮件</button>
-        <input id="bindPasswordInput" type="password" minlength="6" placeholder="验证邮箱后设置密码">
-        <button class="small-button" id="setPasswordBtn" type="button">设置密码</button>
-        <div class="hint" id="upgradeMessage">绑定邮箱后，排行榜最高分会保留在这个账号上。</div>
-      </div>
-      <div class="message" id="message">点击任意列投放动物方块，连在一起的同等级动物会自动合成。</div>
-    </section>
-
-    <section class="game">
-      <div class="topbar">
-        <div class="energy"><span class="bolt">⚡</span><span id="energyValue">已用 0</span></div>
-        <div class="currency" id="currency">0</div>
-      </div>
-      <div class="board-wrap">
-        <div class="drop-line"></div>
-        <div class="board" id="board"></div>
-        <div class="falling-layer" id="fallingLayer"></div>
-        <div class="game-over" id="gameOver">沐场已满</div>
-      </div>
-      <div class="preview-row">
-        <div class="preview">
-          <span>当前方块</span>
-          <div id="currentPreview"></div>
-        </div>
-        <div class="preview">
-          <span>下一方块</span>
-          <div id="nextPreview"></div>
-        </div>
-      </div>
-      <div class="controls">
-        <button class="action secondary" id="brushBtn">使用洗澡刷</button>
-        <button class="action secondary" id="submitScoreBtn">提交成绩</button>
-        <button class="action danger" id="restartBtn">重新开始</button>
-      </div>
-    </section>
-
-    <aside class="panel reward">
-      <h2>本期累计获得</h2>
-      <div class="item-card">
-        <div>应援荧光棒碎片</div>
-        <div class="glow-stick"></div>
-        <strong id="rewardCount">x0</strong>
-      </div>
-      <div class="leaderboard">
-        <h3>排行榜 Top 20</h3>
-        <div class="tab-row">
-          <button id="totalBoardTab" class="active" type="button">总榜</button>
-          <button id="dailyBoardTab" type="button">今日榜</button>
-        </div>
-        <div id="leaderboardList">登录后加载排行榜。</div>
-      </div>
-      <div class="leaderboard">
-        <h3>浴场主题</h3>
-        <div class="theme-grid" id="themeList"></div>
-      </div>
-      <button class="action secondary" id="codexBtn" type="button">动物图鉴</button>
-    </aside>
--->
   </main>
 
   <div class="modal" id="helpModal">
@@ -1558,6 +1478,7 @@
       playerNameEl.textContent = currentPlayerName;
       authMessageEl.textContent = "正在加载浴场...";
       try {
+        gameAppEl.style.display = "";
         gameAppEl.classList.remove("locked");
         renderAccountUpgrade();
         await loadPlayerProfile();
@@ -1585,6 +1506,7 @@
       saveLoaded = false;
       enteringUserId = null;
       grid = null;
+      gameAppEl.style.display = "none";
       authScreenEl.style.display = "block";
       gameAppEl.classList.add("locked");
       upgradeBoxEl.classList.remove("show");
