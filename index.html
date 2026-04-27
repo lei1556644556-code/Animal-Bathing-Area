@@ -163,7 +163,7 @@
       position: absolute;
       left: 10px;
       right: 10px;
-      top: 54px;
+      top: calc(10px + ((100% - 20px - 42px) / 7) + 7px);
       border-top: 3px dashed rgba(205, 79, 92, .5);
       pointer-events: none;
     }
@@ -179,7 +179,10 @@
 
     .falling-layer {
       position: absolute;
-      inset: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      top: -14px;
       pointer-events: none;
       z-index: 2;
     }
@@ -1472,8 +1475,8 @@
         const preview = document.createElement("div");
         preview.className = "falling-piece";
         preview.style.setProperty("--col", "2");
-        preview.style.setProperty("--row", "-1");
-        preview.style.setProperty("--start-row", "-1");
+        preview.style.setProperty("--row", "-0.32");
+        preview.style.setProperty("--start-row", "-0.32");
         preview.style.animation = "none";
         preview.appendChild(renderPiece(currentPiece));
         fallingLayerEl.appendChild(preview);
@@ -1483,7 +1486,7 @@
       falling.className = "falling-piece";
       falling.style.setProperty("--col", String(activeDrop.col));
       falling.style.setProperty("--row", String(activeDrop.row));
-      falling.style.setProperty("--start-row", "-1");
+      falling.style.setProperty("--start-row", "-0.32");
       falling.appendChild(renderPiece(activeDrop.piece));
       fallingLayerEl.appendChild(falling);
     }
