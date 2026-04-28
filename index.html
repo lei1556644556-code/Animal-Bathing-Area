@@ -685,6 +685,27 @@
       font-weight: 800;
     }
 
+    .presence-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(135, 200, 210, .22);
+      color: #6b4b35;
+      font-weight: 900;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .presence-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #56b86f;
+      box-shadow: 0 0 0 3px rgba(86, 184, 111, .18);
+    }
+
     .small-button {
       border: 0;
       border-radius: 8px;
@@ -771,6 +792,33 @@
       box-shadow: 0 10px 24px rgba(61, 42, 31, .24);
       pointer-events: none;
       animation: floatText .95s ease forwards;
+    }
+
+    .announce-banner {
+      position: fixed;
+      left: 50%;
+      top: 18px;
+      transform: translateX(-50%) translateY(-16px);
+      z-index: 40;
+      min-width: min(560px, calc(100% - 28px));
+      max-width: calc(100% - 28px);
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(91, 64, 50, .96);
+      color: #fff8ed;
+      border: 2px solid #f2c15d;
+      box-shadow: 0 16px 34px rgba(58, 35, 23, .28);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .22s ease, transform .22s ease;
+      text-align: center;
+      font-weight: 900;
+      line-height: 1.45;
+    }
+
+    .announce-banner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
 
     @keyframes floatText {
@@ -1140,6 +1188,7 @@
       </div>
       <div class="user-row">
         <span id="playerName">未登录</span>
+        <span class="presence-chip"><span class="presence-dot"></span><span id="homePresenceText">同台 0 人</span></span>
         <span>碎片 <strong id="homeFragments">0</strong></span>
       </div>
       <div class="home-stats">
@@ -1179,6 +1228,9 @@
         <div class="energy"><span class="bolt">⚡</span><span id="energyValue">已用 0</span></div>
         <div class="energy">刷 <span id="brushCount">3</span></div>
         <div class="currency" id="currency">0</div>
+      </div>
+      <div class="user-row" style="margin-top:8px;">
+        <span class="presence-chip"><span class="presence-dot"></span><span id="playPresenceText">同台 0 人</span></span>
       </div>
       <div class="game-meta">
         <div class="game-meta-card">
@@ -1309,6 +1361,8 @@
     </div>
   </div>
 
+  <div class="announce-banner" id="announceBanner">竞技场快报</div>
+
   <div class="modal" id="codexModal">
     <div class="dialog">
       <h2>动物图鉴</h2>
@@ -1353,8 +1407,12 @@
     const LEADERBOARD_TABLE = "leaderboard_scores";
     const DAILY_LEADERBOARD_TABLE = "daily_leaderboard_scores";
     const RUNS_TABLE = "game_run_scores";
+    const PRESENCE_TABLE = "player_presence";
+    const ANNOUNCEMENT_TABLE = "global_announcements";
     const PROFILE_TABLE = "player_profiles";
     const SAVE_TABLE = "game_saves";
+    const ACTIVE_WINDOW_MS = 90000;
+    const HIGH_SCORE_ANNOUNCE_SCORE = 3000;
 
     const bootScreenEl = document.getElementById("bootScreen");
     const authScreenEl = document.getElementById("authScreen");
@@ -1378,6 +1436,8 @@
     const rewardCountEl = document.getElementById("rewardCount");
     const energyValueEl = document.getElementById("energyValue");
     const messageEl = document.getElementById("message");
+    const homePresenceTextEl = document.getElementById("homePresenceText");
+    const playPresenceTextEl = document.getElementById("playPresenceText");
     const playScoreValueEl = document.getElementById("playScoreValue");
     const playBestAnimalValueEl = document.getElementById("playBestAnimalValue");
     const playGapValueEl = document.getElementById("playGapValue");
@@ -1419,6 +1479,7 @@
     const submitResultText = document.getElementById("submitResultText");
     const submitResultCloseBtn = document.getElementById("submitResultCloseBtn");
     const submitResultBoardBtn = document.getElementById("submitResultBoardBtn");
+    const announceBannerEl = document.getElementById("announceBanner");
     const gameOverPromptModal = document.getElementById("gameOverPromptModal");
     const gameOverPromptCloseBtn = document.getElementById("gameOverPromptCloseBtn");
     const gameOverPromptRestartBtn = document.getElementById("gameOverPromptRestartBtn");
@@ -1459,6 +1520,11 @@
     let bornMark;
     let pendingBucketAwards;
     let liveRaceInfo;
+    let activePlayersCount;
+    let presenceIntervalId;
+    let announcementIntervalId;
+    let announceHideTimer;
+    let lastAnnouncementIdSeen;
 
     function createEmptyGrid() {
       return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
@@ -1506,6 +1572,7 @@
       bornMark = null;
       pendingBucketAwards = 0;
       liveRaceInfo = null;
+      activePlayersCount = 0;
       saveLoaded = true;
       settlementModal.classList.remove("show");
       messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
@@ -1584,6 +1651,8 @@
       const fragments = playerProfile?.fragments || 0;
       currencyEl.textContent = fragments;
       if (homeFragmentsEl) homeFragmentsEl.textContent = fragments;
+      if (homePresenceTextEl) homePresenceTextEl.textContent = `同台 ${activePlayersCount || 0} 人`;
+      if (playPresenceTextEl) playPresenceTextEl.textContent = `同台 ${activePlayersCount || 0} 人`;
       rewardCountEl.textContent = `x${fragments}`;
       if (continueBtn) continueBtn.textContent = gameOver ? "查看结算" : grid ? "继续洗护" : "开始洗护";
       brushBtn.textContent = brushMode ? "选择 3x3 区域" : "使用洗澡刷";
@@ -1703,6 +1772,7 @@
         await loadPlayerProfile();
         await loadGameState();
         await loadLeaderboard();
+        await startLiveAtmosphere();
         showScreen("home");
         bootScreenEl.style.display = "none";
         authScreenEl.style.display = "none";
@@ -1728,6 +1798,7 @@
       saveLoaded = false;
       enteringUserId = null;
       grid = null;
+      stopLiveAtmosphere();
       gameAppEl.style.display = "none";
       bootScreenEl.style.display = "none";
       authScreenEl.style.display = "block";
@@ -2100,6 +2171,9 @@
       const resultMessage = `${isGuestUser ? "游客成绩已提交成功" : "成绩提交成功"}，本局性价比 ${runEfficiency.toFixed(2)}${improvedEfficiency ? "，性价比榜已更新" : ""}${rankText}。`;
       messageEl.textContent = resultMessage;
       showFloatText(totalRank ? `提交成功！总榜第 ${totalRank} 名` : "提交成功！");
+      if (improvedScore && (score >= HIGH_SCORE_ANNOUNCE_SCORE || (totalRank && totalRank <= 3))) {
+        await publishHighScoreAnnouncement(score);
+      }
       saveGameState();
       render();
       showSubmitResult(resultMessage);
@@ -2261,6 +2335,113 @@
 
     function showGameOverPrompt() {
       gameOverPromptModal.classList.add("show");
+    }
+
+    function showAnnouncementBanner(text) {
+      if (!announceBannerEl) return;
+      announceBannerEl.textContent = text;
+      announceBannerEl.classList.add("show");
+      if (announceHideTimer) clearTimeout(announceHideTimer);
+      announceHideTimer = setTimeout(() => {
+        announceBannerEl.classList.remove("show");
+      }, 4200);
+    }
+
+    async function updatePresenceHeartbeat() {
+      if (!supabaseClient || !currentUser) return;
+      await supabaseClient
+        .from(PRESENCE_TABLE)
+        .upsert({
+          user_id: currentUser.id,
+          player_name: currentPlayerName,
+          last_seen: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: "user_id" });
+    }
+
+    async function clearPresenceHeartbeat() {
+      if (!supabaseClient || !currentUser) return;
+      await supabaseClient.from(PRESENCE_TABLE).delete().eq("user_id", currentUser.id);
+    }
+
+    async function refreshActivePlayersCount() {
+      if (!supabaseClient) return;
+      const cutoff = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString();
+      const { count } = await supabaseClient
+        .from(PRESENCE_TABLE)
+        .select("*", { count: "exact", head: true })
+        .gte("last_seen", cutoff);
+      activePlayersCount = count || 0;
+      renderStatusUi();
+    }
+
+    async function primeAnnouncementFeed() {
+      if (!supabaseClient) return;
+      const { data } = await supabaseClient
+        .from(ANNOUNCEMENT_TABLE)
+        .select("id")
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      lastAnnouncementIdSeen = data?.id || 0;
+    }
+
+    async function pollAnnouncements() {
+      if (!supabaseClient) return;
+      let query = supabaseClient
+        .from(ANNOUNCEMENT_TABLE)
+        .select("id, message")
+        .order("id", { ascending: true })
+        .limit(5);
+      if (lastAnnouncementIdSeen) query = query.gt("id", lastAnnouncementIdSeen);
+      const { data } = await query;
+      if (!data?.length) return;
+      data.forEach((row) => {
+        showAnnouncementBanner(row.message);
+        lastAnnouncementIdSeen = row.id;
+      });
+    }
+
+    async function publishHighScoreAnnouncement(scoreValue) {
+      if (!supabaseClient || !currentUser) return;
+      const message = `竞技场快报：${currentPlayerName} 刚刚打出 ${scoreValue} 分高分，快来追榜！`;
+      await supabaseClient
+        .from(ANNOUNCEMENT_TABLE)
+        .insert({
+          user_id: currentUser.id,
+          player_name: currentPlayerName,
+          score: scoreValue,
+          message
+        });
+      showAnnouncementBanner(message);
+    }
+
+    async function startLiveAtmosphere() {
+      if (!supabaseClient || !currentUser) return;
+      if (presenceIntervalId) clearInterval(presenceIntervalId);
+      if (announcementIntervalId) clearInterval(announcementIntervalId);
+      await updatePresenceHeartbeat();
+      await refreshActivePlayersCount();
+      await primeAnnouncementFeed();
+      announcementIntervalId = setInterval(() => {
+        pollAnnouncements();
+      }, 15000);
+      presenceIntervalId = setInterval(() => {
+        updatePresenceHeartbeat();
+        refreshActivePlayersCount();
+      }, 30000);
+    }
+
+    function stopLiveAtmosphere() {
+      if (presenceIntervalId) clearInterval(presenceIntervalId);
+      if (announcementIntervalId) clearInterval(announcementIntervalId);
+      presenceIntervalId = null;
+      announcementIntervalId = null;
+      if (announceHideTimer) clearTimeout(announceHideTimer);
+      announceHideTimer = null;
+      activePlayersCount = 0;
+      lastAnnouncementIdSeen = 0;
+      if (announceBannerEl) announceBannerEl.classList.remove("show");
     }
 
     function getRunEfficiency() {
@@ -2752,6 +2933,7 @@
     bindEmailBtn.addEventListener("click", handleBindEmail);
     setPasswordBtn.addEventListener("click", handleSetPassword);
     logoutBtn.addEventListener("click", async () => {
+      await clearPresenceHeartbeat();
       if (supabaseClient) {
         await supabaseClient.auth.signOut();
       }
