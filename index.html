@@ -776,6 +776,13 @@
       color: #a06c17;
     }
 
+    .leader-row span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .float-text {
       position: fixed;
       left: 50%;
@@ -1513,6 +1520,8 @@
       </div>
       <div class="upgrade-box" id="upgradeBox">
         <div class="upgrade-title">游客账号绑定</div>
+        <input id="guestNameInput" type="text" maxlength="8" placeholder="输入游戏昵称">
+        <button class="small-button" id="saveGuestNameBtn" type="button">保存游戏昵称</button>
         <input id="bindEmailInput" type="email" placeholder="输入邮箱">
         <button class="small-button" id="bindEmailBtn" type="button">发送验证邮件</button>
         <input id="bindPasswordInput" type="password" minlength="6" placeholder="验证邮箱后设置密码">
@@ -1794,6 +1803,8 @@
     const gameOverPromptCloseBtn = document.getElementById("gameOverPromptCloseBtn");
     const gameOverPromptRestartBtn = document.getElementById("gameOverPromptRestartBtn");
     const upgradeBoxEl = document.getElementById("upgradeBox");
+    const guestNameInput = document.getElementById("guestNameInput");
+    const saveGuestNameBtn = document.getElementById("saveGuestNameBtn");
     const bindEmailInput = document.getElementById("bindEmailInput");
     const bindEmailBtn = document.getElementById("bindEmailBtn");
     const bindPasswordInput = document.getElementById("bindPasswordInput");
@@ -2122,6 +2133,7 @@
       if (!currentUser) return;
       upgradeBoxEl.classList.toggle("show", isGuestUser);
       if (isGuestUser) {
+        guestNameInput.value = currentPlayerName || "";
         upgradeMessageEl.textContent = "绑定邮箱后，排行榜最高分会保留在这个账号上。邮箱验证完成后再设置密码。";
       }
     }
@@ -2133,6 +2145,42 @@
         localStorage.setItem("animalBathGuestName", name);
       }
       return name;
+    }
+
+    async function handleGuestNameSave() {
+      if (!currentUser || !isGuestUser) return;
+      const nextName = guestNameInput.value.trim();
+      if (!nextName) {
+        upgradeMessageEl.textContent = "请输入游戏昵称。";
+        return;
+      }
+      if (Array.from(nextName).length > 8) {
+        upgradeMessageEl.textContent = "游戏昵称不能超过 8 个字符。";
+        return;
+      }
+      currentPlayerName = nextName;
+      localStorage.setItem("animalBathGuestName", nextName);
+      playerNameEl.textContent = currentPlayerName;
+      if (playerProfile) {
+        playerProfile.player_name = currentPlayerName;
+      }
+      renderAccountUpgrade();
+      renderStatusUi();
+      upgradeMessageEl.textContent = "正在保存游戏昵称...";
+      try {
+        if (supabaseClient) {
+          await supabaseClient.auth.updateUser({
+            data: { ...(currentUser.user_metadata || {}), player_name: currentPlayerName, guest: true }
+          });
+        }
+        await savePlayerProfile();
+        await syncPlayerNameAcrossRecords();
+        await loadLeaderboard();
+        upgradeMessageEl.textContent = "游戏昵称已保存。";
+      } catch (error) {
+        console.error(error);
+        upgradeMessageEl.textContent = `保存失败：${error.message || error}`;
+      }
     }
 
     function defaultProfile() {
@@ -2185,6 +2233,17 @@
           active_theme: playerProfile.active_theme,
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
+    }
+
+    async function syncPlayerNameAcrossRecords() {
+      if (!supabaseClient || !currentUser || !currentPlayerName) return;
+      await Promise.all([
+        supabaseClient.from(LEADERBOARD_TABLE).update({ player_name: currentPlayerName }).eq("user_id", currentUser.id),
+        supabaseClient.from(DAILY_LEADERBOARD_TABLE).update({ player_name: currentPlayerName }).eq("user_id", currentUser.id),
+        supabaseClient.from(RUNS_TABLE).update({ player_name: currentPlayerName }).eq("user_id", currentUser.id),
+        supabaseClient.from(PRESENCE_TABLE).update({ player_name: currentPlayerName, updated_at: new Date().toISOString() }).eq("user_id", currentUser.id),
+        supabaseClient.from(ANNOUNCEMENT_TABLE).update({ player_name: currentPlayerName }).eq("user_id", currentUser.id)
+      ]);
     }
 
     function applyTheme(themeId) {
@@ -3185,6 +3244,7 @@
     loginForm.addEventListener("submit", handleLogin);
     signupForm.addEventListener("submit", handleSignup);
     guestBtn.addEventListener("click", handleGuestLogin);
+    saveGuestNameBtn.addEventListener("click", handleGuestNameSave);
     submitScoreBtn.addEventListener("click", submitScore);
     settlementSubmitBtn.addEventListener("click", submitScore);
     settlementRestartBtn.addEventListener("click", startNewRun);
