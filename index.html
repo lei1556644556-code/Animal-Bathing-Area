@@ -1315,6 +1315,123 @@
         font-size: 18px;
       }
     }
+
+    @media (max-width: 480px) {
+      .mobile-shell {
+        padding: 6px;
+      }
+
+      .mobile-screen,
+      .game-screen {
+        height: calc(100dvh - 12px);
+      }
+
+      .mobile-screen {
+        padding: 8px;
+      }
+
+      .game-screen {
+        gap: 4px;
+      }
+
+      .game-screen .top-nav {
+        padding: 4px 6px;
+      }
+
+      .game-screen .top-nav .small-button {
+        padding: 4px 7px;
+        font-size: 11px;
+      }
+
+      .game-screen .energy {
+        gap: 3px;
+        font-size: 11px;
+      }
+
+      .game-screen .bolt {
+        font-size: 18px;
+      }
+
+      .game-screen .currency {
+        min-width: 64px;
+        padding: 4px 8px;
+        font-size: 14px;
+      }
+
+      .game-screen .user-row {
+        margin-top: 1px !important;
+      }
+
+      .game-screen .presence-chip {
+        padding: 2px 6px;
+        font-size: 10px;
+      }
+
+      .game-screen .game-meta {
+        gap: 4px;
+        margin: 2px 0 4px;
+      }
+
+      .game-screen .game-meta-card {
+        padding: 4px 6px;
+      }
+
+      .game-screen .game-meta-card .label {
+        font-size: 8px;
+      }
+
+      .game-screen .game-meta-card .value {
+        margin-top: 1px;
+        font-size: 13px;
+      }
+
+      .game-screen .game {
+        padding: 6px;
+      }
+
+      .game-screen .board {
+        width: min(100%, calc((100dvh - 440px) * 5 / 7));
+      }
+
+      .game-screen .preview-row {
+        gap: 5px;
+        margin-top: 5px;
+      }
+
+      .game-screen .preview {
+        min-height: 62px;
+        padding: 4px 6px;
+        gap: 2px;
+        font-size: 11px;
+      }
+
+      .game-screen .mini {
+        width: 40px;
+        max-width: 40px;
+        height: 40px;
+      }
+
+      .game-screen .controls {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+        margin-top: 5px;
+      }
+
+      .game-screen .controls .action {
+        padding: 8px 4px;
+        font-size: 12px;
+        line-height: 1.1;
+        box-shadow: inset 0 -3px rgba(113, 76, 33, .18), 0 4px 0 #9f7040;
+      }
+
+      .game-screen .controls .secondary {
+        box-shadow: inset 0 -3px rgba(54, 106, 118, .18), 0 4px 0 #4f8794;
+      }
+
+      .game-screen .controls .danger {
+        box-shadow: inset 0 -3px rgba(131, 61, 48, .18), 0 4px 0 #b46b5b;
+      }
+    }
   </style>
 </head>
 <body>
@@ -2834,6 +2951,10 @@
         maxChain = Math.max(maxChain, chain);
         totalGain += await mergeGroup(next.group, next.target, chain);
         applyGravity();
+        if (isLossLineOccupied()) {
+          bornMark = null;
+          break;
+        }
         while (pendingBucketAwards > 0) {
           if (!trySpawnBucketAward()) break;
           pendingBucketAwards--;
@@ -2888,17 +3009,21 @@
     }
 
     function trySpawnBucketAward() {
-      const openColumns = [];
+      const safeSpawns = [];
       for (let c = 0; c < COLS; c++) {
         const safeRow = getDropRow(c);
-        if (safeRow > LOSS_ROW_INDEX) openColumns.push(c);
+        if (safeRow <= LOSS_ROW_INDEX) continue;
+        grid[safeRow][c] = { type: "bucket" };
+        const stillSafe = !isLossLineOccupied();
+        grid[safeRow][c] = null;
+        if (stillSafe) {
+          safeSpawns.push({ row: safeRow, col: c });
+        }
       }
-      if (!openColumns.length) return false;
-      const col = openColumns[Math.floor(Math.random() * openColumns.length)];
-      const row = getDropRow(col);
-      if (row <= LOSS_ROW_INDEX) return false;
-      grid[row][col] = { type: "bucket" };
-      bornMark = cellKey(row, col);
+      if (!safeSpawns.length) return false;
+      const spawn = safeSpawns[Math.floor(Math.random() * safeSpawns.length)];
+      grid[spawn.row][spawn.col] = { type: "bucket" };
+      bornMark = cellKey(spawn.row, spawn.col);
       return true;
     }
 
@@ -3008,13 +3133,17 @@
       }
     }
 
-    function checkGameOver() {
-      gameOver = Array.from({ length: COLS }, (_, c) => {
+    function isLossLineOccupied() {
+      for (let c = 0; c < COLS; c++) {
         for (let r = 0; r <= LOSS_ROW_INDEX; r++) {
           if (grid[r]?.[c]) return true;
         }
-        return false;
-      }).some(Boolean);
+      }
+      return false;
+    }
+
+    function checkGameOver() {
+      gameOver = isLossLineOccupied();
       if (gameOver) {
         messageEl.textContent = "浴场满员啦，本次洗护完成。";
         showSettlement();
