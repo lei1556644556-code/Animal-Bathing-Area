@@ -1352,6 +1352,7 @@
     const SUPABASE_ANON_KEY = "sb_publishable_8UjZAjC-Ts2NiP8_NpmFdA_jv-CEzhd";
     const LEADERBOARD_TABLE = "leaderboard_scores";
     const DAILY_LEADERBOARD_TABLE = "daily_leaderboard_scores";
+    const RUNS_TABLE = "game_run_scores";
     const PROFILE_TABLE = "player_profiles";
     const SAVE_TABLE = "game_saves";
 
@@ -2042,6 +2043,7 @@
       submitScoreBtn.disabled = true;
       settlementSubmitBtn.disabled = true;
       messageEl.textContent = "正在提交排行榜成绩...";
+      await saveRunRecord(runEfficiency);
       const { data: existing, error: readError } = await supabaseClient
         .from(LEADERBOARD_TABLE)
         .select("score, efficiency")
@@ -2064,7 +2066,7 @@
         const rankParts = [];
         if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
         if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
-        const resultMessage = `当前分数 ${score}、性价比 ${runEfficiency.toFixed(2)} 都未刷新历史记录${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
+        const resultMessage = `当前分数 ${score}、本局性价比 ${runEfficiency.toFixed(2)} 都未刷新历史记录${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
         messageEl.textContent = resultMessage;
         showFloatText(totalRank ? `未刷新总榜，当前第 ${totalRank} 名` : "本局未刷新最高分");
         saveGameState();
@@ -2095,7 +2097,7 @@
       if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
       if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
       const rankText = rankParts.length ? `，当前${rankParts.join("，")}` : "";
-      const resultMessage = `${isGuestUser ? "游客成绩已提交成功" : "成绩提交成功"}${improvedEfficiency ? "，性价比榜已更新" : ""}${rankText}。`;
+      const resultMessage = `${isGuestUser ? "游客成绩已提交成功" : "成绩提交成功"}，本局性价比 ${runEfficiency.toFixed(2)}${improvedEfficiency ? "，性价比榜已更新" : ""}${rankText}。`;
       messageEl.textContent = resultMessage;
       showFloatText(totalRank ? `提交成功！总榜第 ${totalRank} 名` : "提交成功！");
       saveGameState();
@@ -2175,13 +2177,16 @@
         leaderboardListEl.textContent = "暂时还没有成绩。";
         return;
       }
-      leaderboardListEl.innerHTML = data.map((row, index) => `
+      const zeroHint = currentBoardMetric === "efficiency"
+        ? `<div class="auth-note" style="margin:0 0 8px;">旧记录的性价比可能显示为 0.00，重新提交一次成绩后会更新。</div>`
+        : "";
+      leaderboardListEl.innerHTML = `${zeroHint}${data.map((row, index) => `
         <div class="leader-row">
           <strong>${index + 1}</strong>
           <span>${escapeHtml(row.player_name)}</span>
           <strong>${currentBoardMetric === "efficiency" ? Number(row.efficiency || 0).toFixed(2) : row.score}</strong>
         </div>
-      `).join("");
+      `).join("")}`;
     }
 
     async function refreshLiveRaceInfo() {
@@ -2237,6 +2242,21 @@
       settlementModal.classList.remove("show");
       submitResultText.textContent = message;
       submitResultModal.classList.add("show");
+    }
+
+    async function saveRunRecord(runEfficiency) {
+      if (!supabaseClient || !currentUser) return;
+      await supabaseClient
+        .from(RUNS_TABLE)
+        .insert({
+          user_id: currentUser.id,
+          player_name: currentPlayerName,
+          score,
+          energy_used: energyUsed,
+          efficiency: runEfficiency,
+          fragments: Math.floor(score / 300),
+          score_date: beijingDateString()
+        });
     }
 
     function showGameOverPrompt() {
