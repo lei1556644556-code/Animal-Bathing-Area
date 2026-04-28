@@ -1225,6 +1225,10 @@
         <button class="small-button" data-screen="home" type="button">返回</button>
       </div>
       <div class="tab-row">
+        <button id="scoreBoardTab" class="active" type="button">总得分榜</button>
+        <button id="efficiencyBoardTab" type="button">性价比榜</button>
+      </div>
+      <div class="tab-row">
         <button id="totalBoardTab" class="active" type="button">总榜</button>
         <button id="dailyBoardTab" type="button">今日榜</button>
       </div>
@@ -1397,6 +1401,8 @@
     const playScreen = document.getElementById("playScreen");
     const leaderboardScreen = document.getElementById("leaderboardScreen");
     const collectionScreen = document.getElementById("collectionScreen");
+    const scoreBoardTab = document.getElementById("scoreBoardTab");
+    const efficiencyBoardTab = document.getElementById("efficiencyBoardTab");
     const totalBoardTab = document.getElementById("totalBoardTab");
     const dailyBoardTab = document.getElementById("dailyBoardTab");
     const themeListEl = document.getElementById("themeList");
@@ -1428,6 +1434,7 @@
     let isGuestUser;
     let playerProfile;
     let currentBoardMode;
+    let currentBoardMetric;
     let activeScreen;
     let saveLoaded;
     let enteringUserId;
@@ -1684,6 +1691,7 @@
       currentUser = user;
       isGuestUser = Boolean(user.is_anonymous);
       currentBoardMode = currentBoardMode || "total";
+      currentBoardMetric = currentBoardMetric || "score";
       currentPlayerName = user.user_metadata?.player_name || user.email?.split("@")[0] || getGuestName();
       playerNameEl.textContent = currentPlayerName;
       authMessageEl.textContent = "正在加载浴场...";
@@ -1714,6 +1722,7 @@
       isGuestUser = false;
       playerProfile = null;
       currentBoardMode = "total";
+      currentBoardMetric = "score";
       activeScreen = "home";
       saveLoaded = false;
       enteringUserId = null;
@@ -2037,12 +2046,13 @@
         messageEl.textContent = "本局还没有获得洗浴值，暂时不用提交。";
         return;
       }
+      const runEfficiency = getRunEfficiency();
       submitScoreBtn.disabled = true;
       settlementSubmitBtn.disabled = true;
       messageEl.textContent = "正在提交排行榜成绩...";
       const { data: existing, error: readError } = await supabaseClient
         .from(LEADERBOARD_TABLE)
-        .select("score")
+        .select("score, efficiency")
         .eq("user_id", currentUser.id)
         .maybeSingle();
       if (readError) {
@@ -2051,16 +2061,18 @@
         messageEl.textContent = `读取历史最高分失败：${readError.message}`;
         return;
       }
-      if (existing && score <= existing.score) {
+      const improvedScore = !existing || score > (existing.score || 0);
+      const improvedEfficiency = !existing || runEfficiency > Number(existing.efficiency || 0);
+      if (existing && !improvedScore && !improvedEfficiency) {
         submitScoreBtn.disabled = false;
         settlementSubmitBtn.disabled = false;
-        const dailyUpdated = await submitDailyScoreOnly();
+        const dailyUpdated = await submitDailyScoreOnly(runEfficiency);
         const totalRank = await queryPlayerRank(LEADERBOARD_TABLE, existing.score);
         const dailyRank = await queryPlayerRank(DAILY_LEADERBOARD_TABLE, Math.max(score, existing.score), beijingDateString());
         const rankParts = [];
         if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
         if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
-        const resultMessage = `当前分数 ${score} 未超过你的历史最高分 ${existing.score}，排行榜保持不变${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
+        const resultMessage = `当前分数 ${score}、性价比 ${runEfficiency.toFixed(2)} 都未刷新历史记录${rankParts.length ? `，当前${rankParts.join("，")}` : ""}。`;
         scoreSubmittedThisRun = true;
         messageEl.textContent = resultMessage;
         showFloatText(totalRank ? `未刷新总榜，当前第 ${totalRank} 名` : "本局未刷新最高分");
@@ -2074,8 +2086,9 @@
         .upsert({
           user_id: currentUser.id,
           player_name: currentPlayerName,
-          score,
-          fragments: Math.floor(score / 300),
+          score: improvedScore ? score : existing.score,
+          efficiency: improvedEfficiency ? runEfficiency : Number(existing?.efficiency || 0),
+          fragments: Math.floor(Math.max(score, existing?.score || 0) / 300),
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
       submitScoreBtn.disabled = false;
@@ -2084,14 +2097,14 @@
         messageEl.textContent = `提交失败：${error.message}`;
         return;
       }
-      const dailyUpdated = await submitDailyScoreOnly();
+      const dailyUpdated = await submitDailyScoreOnly(runEfficiency);
       const totalRank = await queryPlayerRank(LEADERBOARD_TABLE, score);
       const dailyRank = await queryPlayerRank(DAILY_LEADERBOARD_TABLE, score, beijingDateString());
       const rankParts = [];
       if (totalRank) rankParts.push(`总榜第 ${totalRank} 名`);
       if (dailyUpdated !== false && dailyRank) rankParts.push(`今日榜第 ${dailyRank} 名`);
       const rankText = rankParts.length ? `，当前${rankParts.join("，")}` : "";
-      const resultMessage = `${isGuestUser ? "游客最高分已提交成功" : "成绩提交成功"}${rankText}。`;
+      const resultMessage = `${isGuestUser ? "游客成绩已提交成功" : "成绩提交成功"}${improvedEfficiency ? "，性价比榜已更新" : ""}${rankText}。`;
       scoreSubmittedThisRun = true;
       messageEl.textContent = resultMessage;
       showFloatText(totalRank ? `提交成功！总榜第 ${totalRank} 名` : "提交成功！");
@@ -2100,34 +2113,38 @@
       showSubmitResult(resultMessage);
     }
 
-    async function submitDailyScoreOnly() {
+    async function submitDailyScoreOnly(runEfficiency) {
       const today = beijingDateString();
       const { data: existing } = await supabaseClient
         .from(DAILY_LEADERBOARD_TABLE)
-        .select("score")
+        .select("score, efficiency")
         .eq("user_id", currentUser.id)
         .eq("score_date", today)
         .maybeSingle();
-      if (existing && score <= existing.score) return false;
+      const improvedScore = !existing || score > (existing.score || 0);
+      const improvedEfficiency = !existing || runEfficiency > Number(existing.efficiency || 0);
+      if (existing && !improvedScore && !improvedEfficiency) return false;
       const { error } = await supabaseClient
         .from(DAILY_LEADERBOARD_TABLE)
         .upsert({
           user_id: currentUser.id,
           score_date: today,
           player_name: currentPlayerName,
-          score,
-          fragments: Math.floor(score / 300),
+          score: improvedScore ? score : existing.score,
+          efficiency: improvedEfficiency ? runEfficiency : Number(existing?.efficiency || 0),
+          fragments: Math.floor(Math.max(score, existing?.score || 0) / 300),
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id,score_date" });
       return !error;
     }
 
-    async function queryPlayerRank(tableName, targetScore, scoreDate = null) {
+    async function queryPlayerRank(tableName, targetScore, scoreDate = null, metric = "score") {
       let betterCount = 0;
+      const metricColumn = metric === "efficiency" ? "efficiency" : "score";
       let query = supabaseClient
         .from(tableName)
         .select("*", { count: "exact", head: true })
-        .gt("score", targetScore);
+        .gt(metricColumn, targetScore);
       if (scoreDate) query = query.eq("score_date", scoreDate);
       const { count, error } = await query;
       if (error) return null;
@@ -2149,10 +2166,11 @@
       if (!supabaseClient) return;
       leaderboardListEl.textContent = "排行榜加载中...";
       const isDaily = currentBoardMode === "daily";
+      const metricColumn = currentBoardMetric === "efficiency" ? "efficiency" : "score";
       const query = supabaseClient
         .from(isDaily ? DAILY_LEADERBOARD_TABLE : LEADERBOARD_TABLE)
-        .select("player_name, score, fragments, updated_at")
-        .order("score", { ascending: false })
+        .select("player_name, score, efficiency, fragments, updated_at")
+        .order(metricColumn, { ascending: false })
         .order("updated_at", { ascending: true })
         .limit(20);
       if (isDaily) {
@@ -2171,7 +2189,7 @@
         <div class="leader-row">
           <strong>${index + 1}</strong>
           <span>${escapeHtml(row.player_name)}</span>
-          <strong>${row.score}</strong>
+          <strong>${currentBoardMetric === "efficiency" ? Number(row.efficiency || 0).toFixed(2) : row.score}</strong>
         </div>
       `).join("");
     }
@@ -2231,6 +2249,11 @@
 
     function showGameOverPrompt() {
       gameOverPromptModal.classList.add("show");
+    }
+
+    function getRunEfficiency() {
+      if (energyUsed <= 0) return 0;
+      return Math.round((score / energyUsed) * 100) / 100;
     }
 
     async function unlockAnimal(level) {
@@ -2680,6 +2703,18 @@
       currentBoardMode = "daily";
       dailyBoardTab.classList.add("active");
       totalBoardTab.classList.remove("active");
+      loadLeaderboard();
+    });
+    scoreBoardTab.addEventListener("click", () => {
+      currentBoardMetric = "score";
+      scoreBoardTab.classList.add("active");
+      efficiencyBoardTab.classList.remove("active");
+      loadLeaderboard();
+    });
+    efficiencyBoardTab.addEventListener("click", () => {
+      currentBoardMetric = "efficiency";
+      efficiencyBoardTab.classList.add("active");
+      scoreBoardTab.classList.remove("active");
       loadLeaderboard();
     });
     codexBtn.addEventListener("click", () => {
