@@ -1569,7 +1569,9 @@
         if (!liveRaceInfo) {
           playGapValueEl.textContent = "--";
         } else if (liveRaceInfo.status === "top") {
-          playGapValueEl.textContent = "第1名";
+          playGapValueEl.textContent = "已领先";
+        } else if (liveRaceInfo.status === "solo") {
+          playGapValueEl.textContent = "暂无对手";
         } else if (liveRaceInfo.status === "unranked") {
           playGapValueEl.textContent = "未上榜";
         } else {
@@ -2203,6 +2205,7 @@
       const { data: higherRows, error } = await supabaseClient
         .from(LEADERBOARD_TABLE)
         .select("score")
+        .neq("user_id", currentUser.id)
         .gt("score", score)
         .order("score", { ascending: true })
         .limit(1);
@@ -2217,8 +2220,9 @@
         const { data: anyRows } = await supabaseClient
           .from(LEADERBOARD_TABLE)
           .select("score")
+          .neq("user_id", currentUser.id)
           .limit(1);
-        liveRaceInfo = anyRows?.length ? { status: "top", score } : { status: "unranked", score: 0 };
+        liveRaceInfo = anyRows?.length ? { status: "top", score } : { status: "solo", score: 0 };
       }
       renderStatusUi();
     }
