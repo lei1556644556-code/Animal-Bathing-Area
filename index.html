@@ -906,7 +906,7 @@
 
     .mobile-shell {
       width: min(430px, 100%);
-      min-height: 100vh;
+      min-height: 100dvh;
       margin: 0 auto;
       padding: 12px;
       display: none;
@@ -921,7 +921,7 @@
     }
 
     .mobile-screen {
-      height: calc(100vh - 24px);
+      height: calc(100dvh - 24px);
       overflow: hidden;
       padding: 14px;
     }
@@ -940,7 +940,7 @@
     }
 
     .game-screen {
-      height: calc(100vh - 24px);
+      height: calc(100dvh - 24px);
       overflow: hidden;
       display: none !important;
       flex-direction: column;
@@ -957,6 +957,7 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
+      padding: 10px;
     }
 
     .game-screen .top-nav {
@@ -1027,6 +1028,34 @@
       width: min(100%, calc((100svh - 320px) * 5 / 7));
       max-width: 430px;
       margin: 0 auto;
+    }
+
+    .game-screen .preview-row {
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .game-screen .preview {
+      min-height: 86px;
+      padding: 6px 8px;
+      gap: 4px;
+      font-size: 13px;
+    }
+
+    .game-screen .mini {
+      width: 52px;
+      max-width: 52px;
+      height: 52px;
+    }
+
+    .game-screen .controls {
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .game-screen .controls .action {
+      padding: 10px 10px;
+      font-size: 15px;
     }
 
     .top-nav {
@@ -1138,11 +1167,32 @@
       }
 
       .board {
-        width: min(100%, calc((100svh - 348px) * 5 / 7));
+        width: min(100%, calc((100svh - 388px) * 5 / 7));
       }
 
       .game-screen .top-nav {
         padding: 6px 8px;
+      }
+
+      .mobile-shell {
+        padding: 8px;
+      }
+
+      .mobile-screen,
+      .game-screen {
+        height: calc(100dvh - 16px);
+      }
+
+      .mobile-screen {
+        padding: 10px;
+      }
+
+      .game-screen {
+        gap: 6px;
+      }
+
+      .game-screen .game {
+        padding: 8px;
       }
 
       .game-screen .top-nav .small-button {
@@ -1184,6 +1234,34 @@
       }
 
       .game-screen .game-meta-card .value {
+        font-size: 14px;
+      }
+
+      .game-screen .preview-row {
+        gap: 6px;
+        margin-top: 6px;
+      }
+
+      .game-screen .preview {
+        min-height: 72px;
+        padding: 5px 6px;
+        gap: 3px;
+        font-size: 12px;
+      }
+
+      .game-screen .mini {
+        width: 46px;
+        max-width: 46px;
+        height: 46px;
+      }
+
+      .game-screen .controls {
+        gap: 6px;
+        margin-top: 6px;
+      }
+
+      .game-screen .controls .action {
+        padding: 9px 8px;
         font-size: 14px;
       }
 
