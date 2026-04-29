@@ -1732,6 +1732,8 @@
     const SAVE_TABLE = "game_saves";
     const ACTIVE_WINDOW_MS = 90000;
     const HIGH_SCORE_ANNOUNCE_SCORE = 3000;
+    const LIVE_SYNC_DEBOUNCE_MS = 1200;
+    const LIVE_BOARD_POLL_MS = 6000;
 
     const bootScreenEl = document.getElementById("bootScreen");
     const authScreenEl = document.getElementById("authScreen");
@@ -1844,8 +1846,13 @@
     let activePlayersCount;
     let presenceIntervalId;
     let announcementIntervalId;
+    let leaderboardPollIntervalId;
     let announceHideTimer;
     let lastAnnouncementIdSeen;
+    let liveSyncTimerId;
+    let liveSyncInFlight;
+    let queuedLiveSync;
+    let leaderboardLoadInFlight;
 
     function createEmptyGrid() {
       return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => null));
@@ -1894,12 +1901,15 @@
       pendingBucketAwards = 0;
       liveRaceInfo = null;
       activePlayersCount = 0;
+      queuedLiveSync = null;
+      liveSyncInFlight = false;
       saveLoaded = true;
       settlementModal.classList.remove("show");
       messageEl.textContent = "点击任意列投放动物方块，连在一起的同等级动物会自动合成。";
       render();
       refreshLiveRaceInfo();
       saveGameState();
+      scheduleLiveLeaderboardSync();
     }
 
     function render() {
@@ -2202,6 +2212,7 @@
         .eq("user_id", currentUser.id)
         .maybeSingle();
       if (error) {
+        leaderboardLoadInFlight = false;
         messageEl.textContent = `资料读取失败：${error.message}`;
         playerProfile = defaultProfile();
       } else if (data) {
@@ -2480,6 +2491,8 @@
         return;
       }
       const runEfficiency = getRunEfficiency();
+      queuedLiveSync = buildLiveSyncSnapshot();
+      await flushLiveLeaderboardSync();
       submitScoreBtn.disabled = true;
       settlementSubmitBtn.disabled = true;
       messageEl.textContent = "正在提交排行榜成绩...";
@@ -2573,6 +2586,93 @@
       return !error;
     }
 
+    function buildLiveSyncSnapshot() {
+      return {
+        score,
+        efficiency: getRunEfficiency(),
+        fragments: Math.floor(score / 300),
+        scoreDate: beijingDateString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    async function upsertLiveLeaderboardSnapshot(snapshot) {
+      if (!supabaseClient || !currentUser || !snapshot || snapshot.score <= 0) return;
+      const { data: existingTotal } = await supabaseClient
+        .from(LEADERBOARD_TABLE)
+        .select("score, efficiency")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+      const improvedTotalScore = !existingTotal || snapshot.score > (existingTotal.score || 0);
+      const improvedTotalEfficiency = !existingTotal || snapshot.efficiency > Number(existingTotal.efficiency || 0);
+      if (improvedTotalScore || improvedTotalEfficiency) {
+        await supabaseClient
+          .from(LEADERBOARD_TABLE)
+          .upsert({
+            user_id: currentUser.id,
+            player_name: currentPlayerName,
+            score: improvedTotalScore ? snapshot.score : existingTotal.score,
+            efficiency: improvedTotalEfficiency ? snapshot.efficiency : Number(existingTotal?.efficiency || 0),
+            fragments: Math.max(snapshot.fragments, Math.floor((existingTotal?.score || 0) / 300)),
+            updated_at: snapshot.updatedAt
+          }, { onConflict: "user_id" });
+      }
+
+      const { data: existingDaily } = await supabaseClient
+        .from(DAILY_LEADERBOARD_TABLE)
+        .select("score, efficiency")
+        .eq("user_id", currentUser.id)
+        .eq("score_date", snapshot.scoreDate)
+        .maybeSingle();
+      const improvedDailyScore = !existingDaily || snapshot.score > (existingDaily.score || 0);
+      const improvedDailyEfficiency = !existingDaily || snapshot.efficiency > Number(existingDaily.efficiency || 0);
+      if (improvedDailyScore || improvedDailyEfficiency) {
+        await supabaseClient
+          .from(DAILY_LEADERBOARD_TABLE)
+          .upsert({
+            user_id: currentUser.id,
+            score_date: snapshot.scoreDate,
+            player_name: currentPlayerName,
+            score: improvedDailyScore ? snapshot.score : existingDaily.score,
+            efficiency: improvedDailyEfficiency ? snapshot.efficiency : Number(existingDaily?.efficiency || 0),
+            fragments: Math.max(snapshot.fragments, Math.floor((existingDaily?.score || 0) / 300)),
+            updated_at: snapshot.updatedAt
+          }, { onConflict: "user_id,score_date" });
+      }
+    }
+
+    function scheduleLiveLeaderboardSync(immediate = false) {
+      if (!supabaseClient || !currentUser || score <= 0) return;
+      queuedLiveSync = buildLiveSyncSnapshot();
+      if (liveSyncTimerId) clearTimeout(liveSyncTimerId);
+      liveSyncTimerId = setTimeout(() => {
+        liveSyncTimerId = null;
+        flushLiveLeaderboardSync();
+      }, immediate ? 60 : LIVE_SYNC_DEBOUNCE_MS);
+    }
+
+    async function flushLiveLeaderboardSync() {
+      if (liveSyncInFlight || !queuedLiveSync) return;
+      const snapshot = queuedLiveSync;
+      queuedLiveSync = null;
+      liveSyncInFlight = true;
+      try {
+        await upsertLiveLeaderboardSnapshot(snapshot);
+        if (activeScreen === "leaderboard") {
+          loadLeaderboard();
+        } else {
+          refreshLiveRaceInfo();
+        }
+      } catch (error) {
+        console.warn("live leaderboard sync failed", error);
+      } finally {
+        liveSyncInFlight = false;
+        if (queuedLiveSync) {
+          flushLiveLeaderboardSync();
+        }
+      }
+    }
+
     async function queryPlayerRank(tableName, targetScore, scoreDate = null, metric = "score") {
       let betterCount = 0;
       const metricColumn = metric === "efficiency" ? "efficiency" : "score";
@@ -2598,7 +2698,8 @@
     }
 
     async function loadLeaderboard() {
-      if (!supabaseClient) return;
+      if (!supabaseClient || leaderboardLoadInFlight) return;
+      leaderboardLoadInFlight = true;
       leaderboardListEl.textContent = "排行榜加载中...";
       const isDaily = currentBoardMode === "daily";
       const metricColumn = currentBoardMetric === "efficiency" ? "efficiency" : "score";
@@ -2617,6 +2718,7 @@
         return;
       }
       if (!data?.length) {
+        leaderboardLoadInFlight = false;
         leaderboardListEl.textContent = "暂时还没有成绩。";
         return;
       }
@@ -2630,6 +2732,7 @@
           <strong>${currentBoardMetric === "efficiency" ? Number(row.efficiency || 0).toFixed(2) : row.score}</strong>
         </div>
       `).join("")}`;
+      leaderboardLoadInFlight = false;
     }
 
     async function refreshLiveRaceInfo() {
@@ -2789,9 +2892,11 @@
       if (!supabaseClient || !currentUser) return;
       if (presenceIntervalId) clearInterval(presenceIntervalId);
       if (announcementIntervalId) clearInterval(announcementIntervalId);
+      if (leaderboardPollIntervalId) clearInterval(leaderboardPollIntervalId);
       await updatePresenceHeartbeat();
       await refreshActivePlayersCount();
       await primeAnnouncementFeed();
+      scheduleLiveLeaderboardSync(true);
       announcementIntervalId = setInterval(() => {
         pollAnnouncements();
       }, 15000);
@@ -2799,13 +2904,26 @@
         updatePresenceHeartbeat();
         refreshActivePlayersCount();
       }, 30000);
+      leaderboardPollIntervalId = setInterval(() => {
+        if (activeScreen === "leaderboard") {
+          loadLeaderboard();
+        } else {
+          refreshLiveRaceInfo();
+        }
+      }, LIVE_BOARD_POLL_MS);
     }
 
     function stopLiveAtmosphere() {
       if (presenceIntervalId) clearInterval(presenceIntervalId);
       if (announcementIntervalId) clearInterval(announcementIntervalId);
+      if (leaderboardPollIntervalId) clearInterval(leaderboardPollIntervalId);
+      if (liveSyncTimerId) clearTimeout(liveSyncTimerId);
       presenceIntervalId = null;
       announcementIntervalId = null;
+      leaderboardPollIntervalId = null;
+      liveSyncTimerId = null;
+      liveSyncInFlight = false;
+      queuedLiveSync = null;
       if (announceHideTimer) clearTimeout(announceHideTimer);
       announceHideTimer = null;
       activePlayersCount = 0;
@@ -2960,6 +3078,7 @@
       render();
       refreshLiveRaceInfo();
       saveGameState();
+      scheduleLiveLeaderboardSync();
     }
 
     function getEffectiveLevel(row, col) {
