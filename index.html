@@ -385,6 +385,8 @@
     .tile-9 { background: #8d8a84; }
     .tile-10 { background: #75b74d; }
     .tile-11 { background: #8c55bb; }
+    .tile-12 { background: #4f9fd9; }
+    .tile-13 { background: #f0c94d; color: #6a4b1f; text-shadow: 0 2px rgba(255,255,255,.45); }
 
     .bucket {
       background: #b78a55;
@@ -1641,7 +1643,7 @@
     <div class="dialog">
       <h2>帮助</h2>
       <p>点击一列，当前动物会下落到该列最低的空位。</p>
-      <p>相同等级动物上下左右相邻时会合成：两个 +1，三个 +2，四个及以上 +3，最高等级为 11。</p>
+      <p>相同等级动物上下左右相邻时会合成：两个 +1，三个 +2，四个及以上 +3，最高等级为 13。达到 13 级后不再继续合成。</p>
       <p>合成后动物会下落补位，并继续触发连锁合成。万能木桶会继承它正上方动物的等级并参与合成。</p>
       <p>洗澡刷会处理点击位置附近的 3x3 区域：先按等级从高到低重排，再按行、按列两两合成。</p>
       <button class="action" id="closeHelp">知道了</button>
@@ -1695,15 +1697,15 @@
   <script>
     const ROWS = 7;
     const COLS = 5;
-    const MAX_LEVEL = 11;
+    const MAX_LEVEL = 13;
     const LOSS_ROW_INDEX = 1;
     const BOARD_SIZE = ROWS * COLS;
     const ENERGY_CAP = 300;
     const START_WEIGHTS = [8, 1, 1, 0, 0];
     const END_WEIGHTS = [48, 26, 14, 8, 4];
     const COLORS = Array.from({ length: MAX_LEVEL }, (_, index) => `tile-${index + 1}`);
-    const ANIMAL_ICONS = ["🐱", "🐷", "🦉", "🐻", "🐘", "🐑", "🐯", "🦊", "🐨", "🐸", "🦄"];
-    const ANIMAL_NAMES = ["小猫入浴", "泡泡猪", "浴巾猫头鹰", "搓澡熊", "泡泡象", "棉花羊", "香香虎", "狐狸护理师", "温泉考拉", "青蛙浴场长", "梦幻独角兽"];
+    const ANIMAL_ICONS = ["🐱", "🐷", "🦉", "🐻", "🐘", "🐑", "🐯", "🦊", "🐨", "🐸", "🦄", "🐉", "👑"];
+    const ANIMAL_NAMES = ["小猫入浴", "泡泡猪", "浴巾猫头鹰", "搓澡熊", "泡泡象", "棉花羊", "香香虎", "狐狸护理师", "温泉考拉", "青蛙浴场长", "梦幻独角兽", "云海龙灵", "浴场皇冠"];
     const ANIMAL_DESCRIPTIONS = [
       "第一次进浴场，爪爪还有点紧张。",
       "最喜欢在热水里发呆，泡久了会精神满满。",
@@ -1715,7 +1717,9 @@
       "会帮其他动物递毛巾，服务意识满分。",
       "泡澡时从不着急，是浴场里的慢生活代表。",
       "掌管水温和泡泡，是可靠的浴场长。",
-      "只在特别舒服的连锁里出现，带来梦幻香气。"
+      "只在特别舒服的连锁里出现，带来梦幻香气。",
+      "腾起云海和暖雾，是传说中的泡汤守护者。",
+      "象征浴场圆满毕业，已经不会再继续合成。"
     ];
     const THEMES = [
       { id: "default", name: "默认浴室", cost: 0 },
@@ -1735,6 +1739,8 @@
     const HIGH_SCORE_ANNOUNCE_SCORE = 3000;
     const LIVE_SYNC_DEBOUNCE_MS = 1200;
     const LIVE_BOARD_POLL_MS = 6000;
+    const GUEST_NAME_KEY = "animalBathGuestName";
+    const GUEST_RECOVERY_KEY = "animalBathGuestRecoveryId";
 
     const bootScreenEl = document.getElementById("bootScreen");
     const authScreenEl = document.getElementById("authScreen");
@@ -1896,7 +1902,7 @@
       grid = createEmptyGrid();
       score = 0;
       energyUsed = 0;
-      bestScore = Number(localStorage.getItem("animalBathBest") || 0);
+      bestScore = readBestScoreLocal(0);
       maxChain = 0;
       maxAnimalLevel = 0;
       bathCount = 0;
@@ -2162,12 +2168,101 @@
     }
 
     function getGuestName() {
-      let name = localStorage.getItem("animalBathGuestName");
+      let name = localStorage.getItem(GUEST_NAME_KEY);
       if (!name) {
         name = `游客${Math.floor(1000 + Math.random() * 9000)}`;
-        localStorage.setItem("animalBathGuestName", name);
+        localStorage.setItem(GUEST_NAME_KEY, name);
       }
       return name;
+    }
+
+    function getGuestRecoveryId() {
+      let id = localStorage.getItem(GUEST_RECOVERY_KEY);
+      if (!id) {
+        id = (globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+        localStorage.setItem(GUEST_RECOVERY_KEY, id);
+      }
+      return id;
+    }
+
+    function getBestScoreStorageKey() {
+      if (currentUser?.id && !isGuestUser) return `animalBathBest:${currentUser.id}`;
+      return `animalBathGuestBest:${getGuestRecoveryId()}`;
+    }
+
+    function readBestScoreLocal(fallback = 0) {
+      const candidates = [getBestScoreStorageKey(), "animalBathBest"];
+      for (const key of candidates) {
+        const raw = localStorage.getItem(key);
+        if (raw != null) {
+          const parsed = Number(raw);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      }
+      return fallback;
+    }
+
+    function writeBestScoreLocal(value) {
+      const normalized = String(Math.max(0, Number(value) || 0));
+      localStorage.setItem(getBestScoreStorageKey(), normalized);
+      localStorage.setItem("animalBathBest", normalized);
+    }
+
+    function getPrimarySaveStorageKey(user = currentUser) {
+      if (user?.id && !(user.is_anonymous || isGuestUser)) return `animalBathSave:${user.id}`;
+      return `animalBathGuestSave:${getGuestRecoveryId()}`;
+    }
+
+    function getCompatibleSaveStorageKeys(user = currentUser) {
+      const keys = [];
+      if (user?.id) keys.push(`animalBathSave:${user.id}`);
+      const guestKey = `animalBathGuestSave:${getGuestRecoveryId()}`;
+      if (!keys.includes(guestKey)) keys.push(guestKey);
+      return keys;
+    }
+
+    function getGuestProfileStorageKey() {
+      return `animalBathGuestProfile:${getGuestRecoveryId()}`;
+    }
+
+    function readLocalGuestProfileBackup() {
+      try {
+        const raw = localStorage.getItem(getGuestProfileStorageKey());
+        return raw ? JSON.parse(raw) : null;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function writeLocalGuestProfileBackup() {
+      if (!playerProfile || !isGuestUser) return;
+      localStorage.setItem(getGuestProfileStorageKey(), JSON.stringify({
+        player_name: currentPlayerName,
+        fragments: playerProfile.fragments || 0,
+        unlocked_animals: playerProfile.unlocked_animals || [],
+        unlocked_themes: playerProfile.unlocked_themes || ["default"],
+        active_theme: playerProfile.active_theme || "default",
+        updated_at: new Date().toISOString()
+      }));
+    }
+
+    function findLatestLegacyGuestSave() {
+      let latest = null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (!key.startsWith("animalBathSave:") && !key.startsWith("animalBathGuestSave:")) continue;
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key));
+          if (!parsed?.updated_at || !parsed?.grid) continue;
+          const ts = Date.parse(parsed.updated_at);
+          if (!Number.isFinite(ts)) continue;
+          if (!latest || ts > latest.ts) latest = { key, ts, save: parsed };
+        } catch (_error) {
+          // ignore malformed legacy saves
+        }
+      }
+      return latest?.save || null;
     }
 
     async function handleGuestNameSave() {
@@ -2182,7 +2277,7 @@
         return;
       }
       currentPlayerName = nextName;
-      localStorage.setItem("animalBathGuestName", nextName);
+      localStorage.setItem(GUEST_NAME_KEY, nextName);
       playerNameEl.textContent = currentPlayerName;
       if (playerProfile) {
         playerProfile.player_name = currentPlayerName;
@@ -2193,7 +2288,12 @@
       try {
         if (supabaseClient) {
           await supabaseClient.auth.updateUser({
-            data: { ...(currentUser.user_metadata || {}), player_name: currentPlayerName, guest: true }
+            data: {
+              ...(currentUser.user_metadata || {}),
+              player_name: currentPlayerName,
+              guest: true,
+              guest_recovery_id: getGuestRecoveryId()
+            }
           });
         }
         await savePlayerProfile();
@@ -2237,7 +2337,8 @@
           unlocked_themes: data.unlocked_themes || ["default"]
         };
       } else {
-        playerProfile = defaultProfile();
+        const localGuestProfile = isGuestUser ? readLocalGuestProfileBackup() : null;
+        playerProfile = localGuestProfile ? { ...defaultProfile(), ...localGuestProfile } : defaultProfile();
         await savePlayerProfile();
       }
       applyTheme(playerProfile.active_theme || "default");
@@ -2257,6 +2358,7 @@
           active_theme: playerProfile.active_theme,
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
+      writeLocalGuestProfileBackup();
     }
 
     async function syncPlayerNameAcrossRecords() {
@@ -2320,7 +2422,7 @@
       grid = save.grid || createEmptyGrid();
       score = save.score || 0;
       energyUsed = save.energyUsed || 0;
-      bestScore = Math.max(Number(localStorage.getItem("animalBathBest") || 0), save.bestScore || 0);
+      bestScore = Math.max(readBestScoreLocal(0), save.bestScore || 0);
       maxChain = save.maxChain || 0;
       maxAnimalLevel = save.maxAnimalLevel || 0;
       bathCount = save.bathCount || 0;
@@ -2347,7 +2449,7 @@
         if (!grid) init();
         return;
       }
-      const localKey = `animalBathSave:${currentUser.id}`;
+      const localKeys = getCompatibleSaveStorageKeys(currentUser);
       const { data, error } = await supabaseClient
         .from(SAVE_TABLE)
         .select("save_data")
@@ -2358,8 +2460,9 @@
         refreshLiveRaceInfo();
         return;
       }
-      const localSave = localStorage.getItem(localKey);
-      if (localSave) {
+      for (const localKey of localKeys) {
+        const localSave = localStorage.getItem(localKey);
+        if (!localSave) continue;
         try {
           restoreSaveData(JSON.parse(localSave));
           refreshLiveRaceInfo();
@@ -2369,13 +2472,25 @@
           localStorage.removeItem(localKey);
         }
       }
+      if (isGuestUser) {
+        const recoveredSave = findLatestLegacyGuestSave();
+        if (recoveredSave) {
+          restoreSaveData(recoveredSave);
+          messageEl.textContent = "已尝试从本机游客存档中恢复进度。";
+          refreshLiveRaceInfo();
+          saveGameState();
+          return;
+        }
+      }
       if (!grid) init();
     }
 
     async function saveGameState() {
       if (!currentUser || !grid || !saveLoaded) return;
       const saveData = buildSaveData();
-      localStorage.setItem(`animalBathSave:${currentUser.id}`, JSON.stringify(saveData));
+      for (const localKey of getCompatibleSaveStorageKeys(currentUser)) {
+        localStorage.setItem(localKey, JSON.stringify(saveData));
+      }
       if (!supabaseClient) return;
       await supabaseClient
         .from(SAVE_TABLE)
@@ -2388,7 +2503,9 @@
 
     async function clearGameSave() {
       if (!currentUser) return;
-      localStorage.removeItem(`animalBathSave:${currentUser.id}`);
+      for (const localKey of getCompatibleSaveStorageKeys(currentUser)) {
+        localStorage.removeItem(localKey);
+      }
       if (supabaseClient) {
         await supabaseClient.from(SAVE_TABLE).delete().eq("user_id", currentUser.id);
       }
@@ -2443,9 +2560,10 @@
       if (!isSupabaseConfigured()) return;
       authMessageEl.textContent = "正在以游客身份进入...";
       const guestName = getGuestName();
+      const guestRecoveryId = getGuestRecoveryId();
       const { error } = await supabaseClient.auth.signInAnonymously({
         options: {
-          data: { player_name: guestName, guest: true }
+          data: { player_name: guestName, guest: true, guest_recovery_id: guestRecoveryId }
         }
       });
       authMessageEl.textContent = error ? `游客进入失败：${error.message}` : "游客登录成功。";
@@ -3174,10 +3292,10 @@
     function getEffectiveLevel(row, col) {
       const piece = grid[row]?.[col];
       if (!piece) return null;
-      if (piece.type === "animal") return piece.level;
+      if (piece.type === "animal") return piece.level >= MAX_LEVEL ? null : piece.level;
       if (piece.type === "bucket") {
         const above = grid[row - 1]?.[col];
-        if (above?.type === "animal") return above.level;
+        if (above?.type === "animal" && above.level < MAX_LEVEL) return above.level;
       }
       return null;
     }
@@ -3275,7 +3393,7 @@
       score += gain;
       if (score > bestScore) {
         bestScore = score;
-        localStorage.setItem("animalBathBest", String(bestScore));
+        writeBestScoreLocal(bestScore);
       }
       if (group.length >= 4 || newLevel >= 8) {
         pendingBucketAwards++;
@@ -3377,7 +3495,7 @@
           const b = line[i + 1];
           const pa = grid[a.row][a.col];
           const pb = grid[b.row][b.col];
-          if (pa?.type === "animal" && pb?.type === "animal" && pa.level === pb.level) {
+          if (pa?.type === "animal" && pb?.type === "animal" && pa.level === pb.level && pa.level < MAX_LEVEL) {
             grid[a.row][a.col] = { type: "animal", level: Math.min(MAX_LEVEL, pa.level + 1) };
             grid[b.row][b.col] = null;
             addScoreForBrush(pa.level + 1);
@@ -3393,7 +3511,7 @@
       score += gain;
       if (score > bestScore) {
         bestScore = score;
-        localStorage.setItem("animalBathBest", String(bestScore));
+        writeBestScoreLocal(bestScore);
       }
     }
 
