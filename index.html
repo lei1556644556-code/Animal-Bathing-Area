@@ -2658,9 +2658,7 @@
       liveSyncInFlight = true;
       try {
         await upsertLiveLeaderboardSnapshot(snapshot);
-        if (activeScreen === "leaderboard") {
-          loadLeaderboard();
-        } else {
+        if (activeScreen !== "leaderboard") {
           refreshLiveRaceInfo();
         }
       } catch (error) {
@@ -2905,9 +2903,7 @@
         refreshActivePlayersCount();
       }, 30000);
       leaderboardPollIntervalId = setInterval(() => {
-        if (activeScreen === "leaderboard") {
-          loadLeaderboard();
-        } else {
+        if (activeScreen !== "leaderboard") {
           refreshLiveRaceInfo();
         }
       }, LIVE_BOARD_POLL_MS);
