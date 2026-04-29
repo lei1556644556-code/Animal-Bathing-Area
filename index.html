@@ -1598,6 +1598,7 @@
       <div class="tab-row">
         <button id="scoreBoardTab" class="active" type="button">总得分榜</button>
         <button id="efficiencyBoardTab" type="button">性价比榜</button>
+        <button id="levelBoardTab" type="button">最高等级榜</button>
       </div>
       <div class="tab-row">
         <button id="totalBoardTab" class="active" type="button">总榜</button>
@@ -1785,6 +1786,7 @@
     const collectionScreen = document.getElementById("collectionScreen");
     const scoreBoardTab = document.getElementById("scoreBoardTab");
     const efficiencyBoardTab = document.getElementById("efficiencyBoardTab");
+    const levelBoardTab = document.getElementById("levelBoardTab");
     const totalBoardTab = document.getElementById("totalBoardTab");
     const dailyBoardTab = document.getElementById("dailyBoardTab");
     const themeListEl = document.getElementById("themeList");
@@ -1869,6 +1871,17 @@
         }
       }
       return { type: "animal", level: 1 };
+    }
+
+    function makeBucketPiece() {
+      return { type: "bucket" };
+    }
+
+    function ensureUpcomingBucketReward() {
+      while (pendingBucketAwards > 0 && nextPiece?.type !== "bucket") {
+        nextPiece = makeBucketPiece();
+        pendingBucketAwards--;
+      }
     }
 
     function currentDropWeights() {
@@ -2319,6 +2332,7 @@
       brushMode = Boolean(save.brushMode);
       gameOver = Boolean(save.gameOver);
       pendingBucketAwards = save.pendingBucketAwards || 0;
+      ensureUpcomingBucketReward();
       isAnimating = false;
       activeDrop = null;
       mergeMarks = new Set();
@@ -2491,6 +2505,7 @@
         return;
       }
       const runEfficiency = getRunEfficiency();
+      const { highestLevel, highestLevelCount } = getBoardHighestRankStats();
       queuedLiveSync = buildLiveSyncSnapshot();
       await flushLiveLeaderboardSync();
       submitScoreBtn.disabled = true;
@@ -2499,7 +2514,7 @@
       await saveRunRecord(runEfficiency);
       const { data: existing, error: readError } = await supabaseClient
         .from(LEADERBOARD_TABLE)
-        .select("score, efficiency")
+        .select("score, efficiency, highest_level, highest_level_count")
         .eq("user_id", currentUser.id)
         .maybeSingle();
       if (readError) {
@@ -2510,7 +2525,15 @@
       }
       const improvedScore = !existing || score > (existing.score || 0);
       const improvedEfficiency = !existing || runEfficiency > Number(existing.efficiency || 0);
-      if (existing && !improvedScore && !improvedEfficiency) {
+      const improvedLevel =
+        !existing ||
+        highestLevel > Number(existing.highest_level || 0) ||
+        (highestLevel === Number(existing.highest_level || 0) &&
+          highestLevelCount > Number(existing.highest_level_count || 0)) ||
+        (highestLevel === Number(existing.highest_level || 0) &&
+          highestLevelCount === Number(existing.highest_level_count || 0) &&
+          score > Number(existing.score || 0));
+      if (existing && !improvedScore && !improvedEfficiency && !improvedLevel) {
         submitScoreBtn.disabled = false;
         settlementSubmitBtn.disabled = false;
         const dailyUpdated = await submitDailyScoreOnly(runEfficiency);
@@ -2534,6 +2557,8 @@
           player_name: currentPlayerName,
           score: improvedScore ? score : existing.score,
           efficiency: improvedEfficiency ? runEfficiency : Number(existing?.efficiency || 0),
+          highest_level: improvedLevel ? highestLevel : Number(existing?.highest_level || 0),
+          highest_level_count: improvedLevel ? highestLevelCount : Number(existing?.highest_level_count || 0),
           fragments: Math.floor(Math.max(score, existing?.score || 0) / 300),
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
@@ -2563,15 +2588,24 @@
 
     async function submitDailyScoreOnly(runEfficiency) {
       const today = beijingDateString();
+      const { highestLevel, highestLevelCount } = getBoardHighestRankStats();
       const { data: existing } = await supabaseClient
         .from(DAILY_LEADERBOARD_TABLE)
-        .select("score, efficiency")
+        .select("score, efficiency, highest_level, highest_level_count")
         .eq("user_id", currentUser.id)
         .eq("score_date", today)
         .maybeSingle();
       const improvedScore = !existing || score > (existing.score || 0);
       const improvedEfficiency = !existing || runEfficiency > Number(existing.efficiency || 0);
-      if (existing && !improvedScore && !improvedEfficiency) return false;
+      const improvedLevel =
+        !existing ||
+        highestLevel > Number(existing.highest_level || 0) ||
+        (highestLevel === Number(existing.highest_level || 0) &&
+          highestLevelCount > Number(existing.highest_level_count || 0)) ||
+        (highestLevel === Number(existing.highest_level || 0) &&
+          highestLevelCount === Number(existing.highest_level_count || 0) &&
+          score > Number(existing.score || 0));
+      if (existing && !improvedScore && !improvedEfficiency && !improvedLevel) return false;
       const { error } = await supabaseClient
         .from(DAILY_LEADERBOARD_TABLE)
         .upsert({
@@ -2580,6 +2614,8 @@
           player_name: currentPlayerName,
           score: improvedScore ? score : existing.score,
           efficiency: improvedEfficiency ? runEfficiency : Number(existing?.efficiency || 0),
+          highest_level: improvedLevel ? highestLevel : Number(existing?.highest_level || 0),
+          highest_level_count: improvedLevel ? highestLevelCount : Number(existing?.highest_level_count || 0),
           fragments: Math.floor(Math.max(score, existing?.score || 0) / 300),
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id,score_date" });
@@ -2587,9 +2623,12 @@
     }
 
     function buildLiveSyncSnapshot() {
+      const { highestLevel, highestLevelCount } = getBoardHighestRankStats();
       return {
         score,
         efficiency: getRunEfficiency(),
+        highestLevel,
+        highestLevelCount,
         fragments: Math.floor(score / 300),
         scoreDate: beijingDateString(),
         updatedAt: new Date().toISOString()
@@ -2600,12 +2639,20 @@
       if (!supabaseClient || !currentUser || !snapshot || snapshot.score <= 0) return;
       const { data: existingTotal } = await supabaseClient
         .from(LEADERBOARD_TABLE)
-        .select("score, efficiency")
+        .select("score, efficiency, highest_level, highest_level_count")
         .eq("user_id", currentUser.id)
         .maybeSingle();
       const improvedTotalScore = !existingTotal || snapshot.score > (existingTotal.score || 0);
       const improvedTotalEfficiency = !existingTotal || snapshot.efficiency > Number(existingTotal.efficiency || 0);
-      if (improvedTotalScore || improvedTotalEfficiency) {
+      const improvedTotalLevel =
+        !existingTotal ||
+        snapshot.highestLevel > Number(existingTotal.highest_level || 0) ||
+        (snapshot.highestLevel === Number(existingTotal.highest_level || 0) &&
+          snapshot.highestLevelCount > Number(existingTotal.highest_level_count || 0)) ||
+        (snapshot.highestLevel === Number(existingTotal.highest_level || 0) &&
+          snapshot.highestLevelCount === Number(existingTotal.highest_level_count || 0) &&
+          snapshot.score > Number(existingTotal.score || 0));
+      if (improvedTotalScore || improvedTotalEfficiency || improvedTotalLevel) {
         await supabaseClient
           .from(LEADERBOARD_TABLE)
           .upsert({
@@ -2613,6 +2660,8 @@
             player_name: currentPlayerName,
             score: improvedTotalScore ? snapshot.score : existingTotal.score,
             efficiency: improvedTotalEfficiency ? snapshot.efficiency : Number(existingTotal?.efficiency || 0),
+            highest_level: improvedTotalLevel ? snapshot.highestLevel : Number(existingTotal?.highest_level || 0),
+            highest_level_count: improvedTotalLevel ? snapshot.highestLevelCount : Number(existingTotal?.highest_level_count || 0),
             fragments: Math.max(snapshot.fragments, Math.floor((existingTotal?.score || 0) / 300)),
             updated_at: snapshot.updatedAt
           }, { onConflict: "user_id" });
@@ -2620,13 +2669,21 @@
 
       const { data: existingDaily } = await supabaseClient
         .from(DAILY_LEADERBOARD_TABLE)
-        .select("score, efficiency")
+        .select("score, efficiency, highest_level, highest_level_count")
         .eq("user_id", currentUser.id)
         .eq("score_date", snapshot.scoreDate)
         .maybeSingle();
       const improvedDailyScore = !existingDaily || snapshot.score > (existingDaily.score || 0);
       const improvedDailyEfficiency = !existingDaily || snapshot.efficiency > Number(existingDaily.efficiency || 0);
-      if (improvedDailyScore || improvedDailyEfficiency) {
+      const improvedDailyLevel =
+        !existingDaily ||
+        snapshot.highestLevel > Number(existingDaily.highest_level || 0) ||
+        (snapshot.highestLevel === Number(existingDaily.highest_level || 0) &&
+          snapshot.highestLevelCount > Number(existingDaily.highest_level_count || 0)) ||
+        (snapshot.highestLevel === Number(existingDaily.highest_level || 0) &&
+          snapshot.highestLevelCount === Number(existingDaily.highest_level_count || 0) &&
+          snapshot.score > Number(existingDaily.score || 0));
+      if (improvedDailyScore || improvedDailyEfficiency || improvedDailyLevel) {
         await supabaseClient
           .from(DAILY_LEADERBOARD_TABLE)
           .upsert({
@@ -2635,6 +2692,8 @@
             player_name: currentPlayerName,
             score: improvedDailyScore ? snapshot.score : existingDaily.score,
             efficiency: improvedDailyEfficiency ? snapshot.efficiency : Number(existingDaily?.efficiency || 0),
+            highest_level: improvedDailyLevel ? snapshot.highestLevel : Number(existingDaily?.highest_level || 0),
+            highest_level_count: improvedDailyLevel ? snapshot.highestLevelCount : Number(existingDaily?.highest_level_count || 0),
             fragments: Math.max(snapshot.fragments, Math.floor((existingDaily?.score || 0) / 300)),
             updated_at: snapshot.updatedAt
           }, { onConflict: "user_id,score_date" });
@@ -2700,13 +2759,22 @@
       leaderboardLoadInFlight = true;
       leaderboardListEl.textContent = "排行榜加载中...";
       const isDaily = currentBoardMode === "daily";
-      const metricColumn = currentBoardMetric === "efficiency" ? "efficiency" : "score";
-      const query = supabaseClient
+      const metricColumn = currentBoardMetric === "efficiency" ? "efficiency" : currentBoardMetric === "level" ? "highest_level" : "score";
+      let query = supabaseClient
         .from(isDaily ? DAILY_LEADERBOARD_TABLE : LEADERBOARD_TABLE)
-        .select("player_name, score, efficiency, fragments, updated_at")
-        .order(metricColumn, { ascending: false })
-        .order("updated_at", { ascending: true })
+        .select("player_name, score, efficiency, highest_level, highest_level_count, fragments, updated_at")
         .limit(20);
+      if (currentBoardMetric === "level") {
+        query = query
+          .order("highest_level", { ascending: false })
+          .order("highest_level_count", { ascending: false })
+          .order("score", { ascending: false })
+          .order("updated_at", { ascending: true });
+      } else {
+        query = query
+          .order(metricColumn, { ascending: false })
+          .order("updated_at", { ascending: true });
+      }
       if (isDaily) {
         query.eq("score_date", beijingDateString());
       }
@@ -2727,7 +2795,11 @@
         <div class="leader-row">
           <strong>${index + 1}</strong>
           <span>${escapeHtml(row.player_name)}</span>
-          <strong>${currentBoardMetric === "efficiency" ? Number(row.efficiency || 0).toFixed(2) : row.score}</strong>
+          <strong>${currentBoardMetric === "efficiency"
+            ? Number(row.efficiency || 0).toFixed(2)
+            : currentBoardMetric === "level"
+              ? `Lv.${Number(row.highest_level || 0)} x${Number(row.highest_level_count || 0)}`
+              : row.score}</strong>
         </div>
       `).join("")}`;
       leaderboardLoadInFlight = false;
@@ -2790,6 +2862,7 @@
 
     async function saveRunRecord(runEfficiency) {
       if (!supabaseClient || !currentUser) return;
+      const { highestLevel, highestLevelCount } = getBoardHighestRankStats();
       await supabaseClient
         .from(RUNS_TABLE)
         .insert({
@@ -2798,6 +2871,8 @@
           score,
           energy_used: energyUsed,
           efficiency: runEfficiency,
+          highest_level: highestLevel,
+          highest_level_count: highestLevelCount,
           fragments: Math.floor(score / 300),
           score_date: beijingDateString()
         });
@@ -2930,6 +3005,24 @@
     function getRunEfficiency() {
       if (energyUsed <= 0) return 0;
       return Math.round((score / energyUsed) * 100) / 100;
+    }
+
+    function getBoardHighestRankStats() {
+      let highestLevel = 0;
+      let highestLevelCount = 0;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const piece = grid?.[r]?.[c];
+          if (!piece || piece.type !== "animal") continue;
+          if (piece.level > highestLevel) {
+            highestLevel = piece.level;
+            highestLevelCount = 1;
+          } else if (piece.level === highestLevel) {
+            highestLevelCount += 1;
+          }
+        }
+      }
+      return { highestLevel, highestLevelCount };
     }
 
     async function unlockAnimal(level) {
@@ -3065,6 +3158,7 @@
       energyUsed += 1;
       currentPiece = nextPiece;
       nextPiece = randomPiece();
+      ensureUpcomingBucketReward();
       let gained = await resolveBoard({ row, col });
       if (gained === 0) {
         messageEl.textContent = "方块已落下，继续找能连成一片的位置。";
@@ -3143,15 +3237,12 @@
           bornMark = null;
           break;
         }
-        while (pendingBucketAwards > 0) {
-          if (!trySpawnBucketAward()) break;
-          pendingBucketAwards--;
-        }
         render();
         await delay(160);
         bornMark = null;
         next = null;
       }
+      ensureUpcomingBucketReward();
       if (totalGain > 0) {
         messageEl.textContent = chain > 1
           ? `漂亮，触发 ${chain} 段连锁，获得 ${totalGain} 洗浴值。`
@@ -3188,31 +3279,16 @@
       }
       if (group.length >= 4 || newLevel >= 8) {
         pendingBucketAwards++;
+        ensureUpcomingBucketReward();
         showFloatText("豪华护理！");
+        messageEl.textContent = pendingBucketAwards > 0 || nextPiece?.type === "bucket"
+          ? "奖励木桶已加入后续队列，你可以连续决定它们的落点。"
+          : "奖励木桶已加入后续方块，落点由你决定。";
       } else if (group.length === 3) {
         showFloatText("泡泡加倍！");
       }
       await unlockAnimal(newLevel);
       return gain;
-    }
-
-    function trySpawnBucketAward() {
-      const safeSpawns = [];
-      for (let c = 0; c < COLS; c++) {
-        const safeRow = getDropRow(c);
-        if (safeRow <= LOSS_ROW_INDEX) continue;
-        grid[safeRow][c] = { type: "bucket" };
-        const stillSafe = !isLossLineOccupied();
-        grid[safeRow][c] = null;
-        if (stillSafe) {
-          safeSpawns.push({ row: safeRow, col: c });
-        }
-      }
-      if (!safeSpawns.length) return false;
-      const spawn = safeSpawns[Math.floor(Math.random() * safeSpawns.length)];
-      grid[spawn.row][spawn.col] = { type: "bucket" };
-      bornMark = cellKey(spawn.row, spawn.col);
-      return true;
     }
 
     function applyGravity() {
@@ -3401,12 +3477,21 @@
       currentBoardMetric = "score";
       scoreBoardTab.classList.add("active");
       efficiencyBoardTab.classList.remove("active");
+      levelBoardTab.classList.remove("active");
       loadLeaderboard();
     });
     efficiencyBoardTab.addEventListener("click", () => {
       currentBoardMetric = "efficiency";
       efficiencyBoardTab.classList.add("active");
       scoreBoardTab.classList.remove("active");
+      levelBoardTab.classList.remove("active");
+      loadLeaderboard();
+    });
+    levelBoardTab.addEventListener("click", () => {
+      currentBoardMetric = "level";
+      levelBoardTab.classList.add("active");
+      scoreBoardTab.classList.remove("active");
+      efficiencyBoardTab.classList.remove("active");
       loadLeaderboard();
     });
     codexBtn.addEventListener("click", () => {
